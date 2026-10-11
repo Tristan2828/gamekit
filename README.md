@@ -35,6 +35,7 @@ Later steps also use Aseprite, ffmpeg and Godot (see the roadmap).
 | `/gamekit:assets-status` | See what's left, mark assets done, record licenses, regenerate `CREDITS.md` |
 | `/gamekit:art-draw` | Have Claude draw a sprite as text rows, render it to PNG and review it |
 | `/gamekit:art-export` | Export your `.aseprite` files with the Aseprite CLI; check any image's size, frames and palette |
+| `/gamekit:pack-import` | Import a downloaded pack, record its license, and cut sprites, frames or sounds out of it |
 
 The same tools work without Claude, from the game's folder:
 
@@ -47,6 +48,8 @@ python <gamekit>/plugins/gamekit/scripts/gamekit.py draw [ids]       # art/<id>.
 python <gamekit>/plugins/gamekit/scripts/gamekit.py export [ids]     # art/<id>.aseprite -> PNG
 python <gamekit>/plugins/gamekit/scripts/gamekit.py check [ids]
 python <gamekit>/plugins/gamekit/scripts/gamekit.py preview [ids] --scale 8
+python <gamekit>/plugins/gamekit/scripts/gamekit.py pack add <zip> <name>     # then: pack info / pack license
+python <gamekit>/plugins/gamekit/scripts/gamekit.py pack use <name> <file> <asset> [--crop x,y,w,h] [--anim walk=0,16,4] [--resize 16x16] [--recolor]
 ```
 
 Animated sprites become a sheet (one row per animation, frames left to right) with a JSON
@@ -62,8 +65,8 @@ sidecar next to the PNG listing each frame's position:
 |---|---|---|
 | 1 | Plugin skeleton, `assets.yaml` manifest, palette files (.hex / .gpl), `CREDITS.md`, plan + status skills | ✅ done |
 | 2 | Art: Claude's text-row sprites → PNG on the palette, palette check, preview sheet, Aseprite CLI export | ✅ done |
-| 3 | Pack import: unzip, rename, record license, optional recolor to the palette | next |
-| 4 | Sound effects: ffmpeg clean-up (trim, mono, loudness, WAV), then an sfxr-style generator with presets | |
+| 3 | Pack import: unzip, record license, crop / slice / resize / recolor into assets | ✅ done |
+| 4 | Sound effects: ffmpeg clean-up (trim, mono, loudness, WAV), then an sfxr-style generator with presets | next |
 | 5 | Music: render text scores with Godot headless, export looping OGG | |
 | 6 | First real use: GameTest's first batch (heroes, enemies, floors) | |
 

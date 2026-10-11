@@ -29,7 +29,8 @@ Edit `assets.yaml` directly, then run `validate`.
 - **A file arrived** (exported, downloaded, generated): set `status: draft` while it still needs
   cleanup or review in-game, `done` when the user is happy with it. `validate` fails if a `done`
   asset's file is missing from the output folder.
-- **Downloaded or commissioned asset** (`source: pack`, `library`, `commission`): fill
+- **Downloaded or commissioned asset** (`source: pack`, `library`, `commission`): for an imported
+  pack use `license: {pack: <name>}` (see the `pack-import` skill); otherwise fill
   `license: {name, author, url}` from the pack's license file or download page. Never guess a
   license. If it's unclear, leave the asset at `todo`/`draft`, and tell the user what to check.
   CC-BY and similar licenses require the credit to ship with the game.

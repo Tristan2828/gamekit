@@ -170,10 +170,17 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
             problems.append(f"{where}: only sprites have animation frames")
 
         if a.source in LICENSED_SOURCES and a.status != "todo":
-            if not a.license.get("name"):
-                problems.append(f"{where}: a {a.source} asset needs license.name (e.g. CC0, CC-BY 4.0)")
-            if not a.license.get("author"):
-                problems.append(f"{where}: a {a.source} asset needs license.author")
+            try:
+                lic = effective_license(manifest, a)
+            except Exception as error:  # a missing or broken pack.yaml
+                problems.append(f"{where}: license.pack: {error}")
+            else:
+                if not lic.get("name"):
+                    problems.append(f"{where}: a {a.source} asset needs license.name (e.g. CC0, CC-BY 4.0)"
+                                    + (" in its pack.yaml" if a.license.get("pack") else ""))
+                if not lic.get("author"):
+                    problems.append(f"{where}: a {a.source} asset needs license.author"
+                                    + (" in its pack.yaml" if a.license.get("pack") else ""))
         if check_files and a.status == "done" and a.file and not manifest.asset_path(a).exists():
             problems.append(f"{where}: marked done but {manifest.output}/{a.file} is missing")
     return problems
@@ -189,3 +196,13 @@ def summary(manifest: Manifest) -> dict[str, dict[str, int]]:
         if isinstance(a.frames, dict):
             row["frames"] += a.frame_count()
     return table
+
+
+def effective_license(manifest: Manifest, asset: Asset) -> dict[str, str]:
+    """The asset's license; `license: {pack: <name>}` reads it from packs/<name>/pack.yaml."""
+    pack_name = asset.license.get("pack")
+    if not pack_name:
+        return asset.license
+    from . import packs  # here to avoid importing Pillow for plain manifest checks
+    pack = packs.load(manifest.root, str(pack_name))
+    return {**pack.license, **{k: v for k, v in asset.license.items() if k != "pack"}}

@@ -6,7 +6,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import art, aseprite, credits, manifest, palette, pipeline
+from . import art, aseprite, credits, manifest, packs, palette, pipeline
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -44,12 +44,40 @@ def main(argv: list[str] | None = None) -> int:
     show.add_argument("--scale", type=int, default=4, help="pixel scale (default: 4)")
     show.add_argument("--columns", type=int, default=6, help="images per row (default: 6)")
 
+    pack = commands.add_parser("pack", help="import ready-made asset packs and take assets from them")
+    pack_commands = pack.add_subparsers(dest="pack_command", required=True)
+    pack_add = pack_commands.add_parser("add", help="copy a downloaded .zip or folder into packs/<name>/")
+    pack_add.add_argument("source", help="path to the .zip or folder")
+    pack_add.add_argument("name", help="short pack name, e.g. kenney_tiny_dungeon")
+    pack_add.add_argument("--url", default="", help="where it was downloaded from")
+    _license_args(pack_add)
+    pack_license = pack_commands.add_parser("license", help="set a pack's license (from its license file)")
+    pack_license.add_argument("name")
+    _license_args(pack_license)
+    pack_list = pack_commands.add_parser("list", help="list packs, or the files in one pack")
+    pack_list.add_argument("name", nargs="?")
+    pack_list.add_argument("--filter", default="", help="only paths containing this text")
+    pack_info = pack_commands.add_parser("info", help="a pack's license, license files and hints")
+    pack_info.add_argument("name")
+    pack_use = pack_commands.add_parser("use", help="make an asset from a file in a pack")
+    pack_use.add_argument("name", help="pack name")
+    pack_use.add_argument("file", help="file inside the pack (as `pack list` shows it)")
+    pack_use.add_argument("asset", help="asset id in the manifest")
+    pack_use.add_argument("--crop", help="x,y,w,h: cut this part out of the image (or out of a sheet)")
+    pack_use.add_argument("--anim", action="append", default=[],
+                          help="name=x,y,count: an animation's frames, left to right from x,y (repeatable)")
+    pack_use.add_argument("--frame", help="WxH frame size in the pack's sheet (default: the asset's size)")
+    pack_use.add_argument("--resize", help="WxH: scale each frame to this size (nearest-neighbor)")
+    pack_use.add_argument("--recolor", action="store_true", help="snap colors to the manifest palette")
+    pack_use.add_argument("--force", action="store_true", help="overwrite an existing asset file")
+
     args = parser.parse_args(argv)
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
-                "draw": _draw, "export": _export, "check": _check, "preview": _preview}
+                "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack}
     try:
         return handlers[args.command](args)
-    except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError) as error:
+    except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
+            packs.PackError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -191,4 +219,143 @@ def _preview(args: argparse.Namespace) -> int:
     items = pipeline.preview_items(loaded, pipeline.image_assets(loaded, args.ids))
     art.preview(items, scale=max(1, args.scale), columns=max(1, args.columns)).save(args.out)
     print(f"wrote {args.out} ({len(items)} images)")
+    return 0
+
+
+def _license_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--license", dest="license_name", default="",
+                        help="license name exactly as the pack states it, e.g. CC0, CC-BY 4.0")
+    parser.add_argument("--author", default="", help="who to credit")
+    parser.add_argument("--license-url", default="", help="link to the license or the pack page")
+
+
+def _pack(args: argparse.Namespace) -> int:
+    root = Path(args.manifest).resolve().parent
+    return {"add": _pack_add, "license": _pack_license, "list": _pack_list,
+            "info": _pack_info, "use": _pack_use}[args.pack_command](args, root)
+
+
+def _pack_add(args: argparse.Namespace, root: Path) -> int:
+    pack = packs.add(root, Path(args.source), args.name)
+    pack.source_url = args.url
+    if args.license_name or args.author:
+        pack.license = {"name": args.license_name, "author": args.author, "url": args.license_url}
+    packs.save(pack)
+    files = packs.list_files(pack)
+    print(f"added pack {pack.name}: {len(files)} files in {pack.files_dir}")
+    _print_license(pack)
+    print("tip: big packs can be git-ignored (packs/*/files/); keep pack.yaml so the license stays recorded")
+    return 0
+
+
+def _pack_license(args: argparse.Namespace, root: Path) -> int:
+    pack = packs.load(root, args.name)
+    pack.license = {"name": args.license_name or pack.license.get("name", ""),
+                    "author": args.author or pack.license.get("author", ""),
+                    "url": args.license_url or pack.license.get("url", "")}
+    packs.save(pack)
+    _print_license(pack)
+    return 0 if pack.has_license() else 1
+
+
+def _print_license(pack: packs.Pack) -> None:
+    if pack.has_license():
+        lic = pack.license
+        print(f"license: {lic['name']} by {lic['author']}" + (f" ({lic['url']})" if lic.get("url") else ""))
+        return
+    print("license: NOT SET. Read the pack's license file or download page, then run:")
+    print(f'  gamekit pack license {pack.name} --license "<name>" --author "<who to credit>" --license-url <link>')
+    hints = packs.license_hints(pack)
+    if not hints:
+        print("  (no license or readme file found in the pack: check its download page)")
+    for rel, found in hints:
+        print(f"  {rel}: " + (", ".join(found) if found else "no known license phrases") + " (hints only)")
+
+
+def _pack_list(args: argparse.Namespace, root: Path) -> int:
+    if not args.name:
+        found = packs.all_packs(root)
+        for pack in found:
+            lic = f"{pack.license['name']} by {pack.license['author']}" if pack.has_license() else "license NOT SET"
+            print(f"{pack.name}: {len(packs.list_files(pack))} files, {lic}")
+        if not found:
+            print("no packs yet: import one with `gamekit pack add <zip> <name>`")
+        return 0
+    pack = packs.load(root, args.name)
+    shown = 0
+    for rel in packs.list_files(pack):
+        suffix = rel.suffix.lower()
+        if args.filter.lower() not in rel.as_posix().lower():
+            continue
+        if suffix in packs.IMAGE_TYPES or suffix in packs.AUDIO_TYPES:
+            print(f"{rel.as_posix()}  {packs.describe(pack.files_dir / rel)}")
+            shown += 1
+    print(f"{shown} image and audio files")
+    return 0
+
+
+def _pack_info(args: argparse.Namespace, root: Path) -> int:
+    pack = packs.load(root, args.name)
+    print(f"pack {pack.name} ({pack.folder})")
+    if pack.source_url:
+        print(f"downloaded from: {pack.source_url}")
+    _print_license(pack)
+    for rel in packs.license_files(pack):
+        print(f"license/readme file: {pack.files_dir / rel}")
+    return 0
+
+
+def _size(text: str | None, flag: str) -> tuple[int, int] | None:
+    if not text:
+        return None
+    parts = text.lower().split("x")
+    if len(parts) != 2 or not all(p.isdigit() and int(p) > 0 for p in parts):
+        raise packs.PackError(f"{flag} needs WxH, e.g. 16x16; got {text!r}")
+    return int(parts[0]), int(parts[1])
+
+
+def _pack_use(args: argparse.Namespace, root: Path) -> int:
+    loaded = manifest.load(args.manifest)
+    pack = packs.load(root, args.name)
+    if not pack.has_license():
+        raise packs.PackError(f"pack {pack.name} has no license recorded yet; run `gamekit pack info {pack.name}`")
+    by_id = {a.id: a for a in loaded.assets}
+    if args.asset not in by_id:
+        raise packs.PackError(f"{args.asset!r} is not in {args.manifest}")
+    asset = by_id[args.asset]
+    source = packs.resolve(pack, args.file)
+    out = loaded.asset_path(asset)
+    if out.exists() and not args.force:
+        raise packs.PackError(f"{out} already exists; add --force to replace it")
+    out_suffix = out.suffix.lower()
+
+    if out_suffix in (".wav", ".ogg"):
+        if source.suffix.lower() != out_suffix:
+            raise packs.PackError(f"{source.name} is {source.suffix}, the asset wants {out_suffix}; "
+                                  "convert it first (the sound clean-up step does this)")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, out)
+        print(f"{asset.id}: copied {pack.name}/{args.file} -> {asset.file}")
+    elif out_suffix == ".png":
+        if source.suffix.lower() not in packs.IMAGE_TYPES:
+            raise packs.PackError(f"{source.name} is not an image")
+        asset_size = tuple(asset.size) if isinstance(asset.size, list) and len(asset.size) == 2 else None
+        anims = [packs.parse_anim(a) for a in args.anim]
+        frame = _size(args.frame, "--frame") or asset_size
+        crop_box = packs.parse_box(args.crop) if args.crop else None
+        image, sidecar = packs.build(source, crop_box, anims, frame, _size(args.resize, "--resize"))
+        if args.recolor:
+            image, changed = packs.recolor(image, [e.color for e in pipeline.palette_entries(loaded)])
+            print(f"recolored {changed} pixels to the palette")
+        art.save(image, sidecar, out)
+        print(f"{asset.id}: {pack.name}/{args.file} -> {asset.file}")
+        problems = pipeline.check(loaded, asset, [e.color for e in pipeline.palette_entries(loaded)])
+        for problem in problems:
+            print(f"  - {problem}")
+    else:
+        raise packs.PackError(f"{asset.id}: don't know how to make a {out_suffix} file from a pack")
+
+    if asset.source != "pack" or asset.license.get("pack") != pack.name or asset.status == "todo":
+        print(f"now update {asset.id} in {Path(args.manifest).name}:")
+        print(f"  source: pack, status: draft, license: {{pack: {pack.name}}}")
     return 0
