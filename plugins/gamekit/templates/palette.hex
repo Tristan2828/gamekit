@@ -1,19 +1,21 @@
 ; Starter dark fantasy palette, 16 colors. One RRGGBB per line.
 ; Replace it with your game's palette (Lospec.com "HEX file" downloads work as-is,
 ; and so do Aseprite .gpl files: point `palette:` in assets.yaml at either).
-0d0b12
-1f1a2b
-3a2f4a
-5e4b6b
-8f7a99
-c9bcd1
-2b1d14
-5a3a22
-9a6a3a
-d9a066
-4a0f12
-8f1d21
-d94a38
-2e3b2a
-5b7a3d
-e8d9a8
+; Optional: a name after a color ("0d0b12 k"). One-character names are drawing keys
+; for text sprites, so art/<id>.yaml files can use them without a keys block.
+0d0b12 k
+1f1a2b x
+3a2f4a u
+5e4b6b U
+8f7a99 l
+c9bcd1 w
+2b1d14 c
+5a3a22 C
+9a6a3a o
+d9a066 O
+4a0f12 R
+8f1d21 r
+d94a38 e
+2e3b2a n
+5b7a3d N
+e8d9a8 y

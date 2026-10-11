@@ -6,7 +6,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import credits, manifest, palette
+from . import art, aseprite, credits, manifest, palette, pipeline
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -29,10 +29,27 @@ def main(argv: list[str] | None = None) -> int:
     write_credits = commands.add_parser("credits", help="write CREDITS.md from the manifest")
     write_credits.add_argument("-o", "--out", default="CREDITS.md", help="output path (default: ./CREDITS.md)")
 
+    draw = commands.add_parser("draw", help="render Claude's text sprites (art/<id>.yaml) to PNG")
+    draw.add_argument("ids", nargs="*", help="asset ids (default: every source: claude asset with a source file)")
+
+    export = commands.add_parser("export", help="export .aseprite files with the Aseprite CLI")
+    export.add_argument("ids", nargs="*", help="asset ids (default: every source: self asset with a source file)")
+
+    check = commands.add_parser("check", help="check finished images: size, frames, palette")
+    check.add_argument("ids", nargs="*", help="asset ids (default: every image asset whose file exists)")
+
+    show = commands.add_parser("preview", help="write a scaled-up contact sheet of finished images")
+    show.add_argument("ids", nargs="*", help="asset ids (default: every image asset whose file exists)")
+    show.add_argument("-o", "--out", default="preview.png", help="output path (default: ./preview.png)")
+    show.add_argument("--scale", type=int, default=4, help="pixel scale (default: 4)")
+    show.add_argument("--columns", type=int, default=6, help="images per row (default: 6)")
+
     args = parser.parse_args(argv)
+    handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
+                "draw": _draw, "export": _export, "check": _check, "preview": _preview}
     try:
-        return {"init": _init, "validate": _validate, "status": _status, "credits": _credits}[args.command](args)
-    except (manifest.ManifestError, palette.PaletteError) as error:
+        return handlers[args.command](args)
+    except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -111,4 +128,67 @@ def _credits(args: argparse.Namespace) -> int:
     loaded = manifest.load(args.manifest)
     Path(args.out).write_text(credits.render(loaded), encoding="utf-8")
     print(f"wrote {args.out}")
+    return 0
+
+
+def _sources(loaded: manifest.Manifest, ids: list[str], source: str) -> list[manifest.Asset]:
+    """Assets to build: the named ones, or every `source` asset whose source file exists."""
+    if ids:
+        return pipeline.image_assets(loaded, ids)
+    picked = []
+    for a in loaded.assets:
+        src = loaded.source_path(a)
+        if a.source == source and src is not None and src.exists():
+            picked.append(a)
+    return picked
+
+
+def _report(results: list[tuple[manifest.Asset, list[str]]], verb: str) -> int:
+    failed = 0
+    for asset, problems in results:
+        if problems:
+            failed += 1
+            print(f"{asset.id}: {verb}, with problems:")
+            for problem in problems:
+                print(f"  - {problem}")
+        else:
+            print(f"{asset.id}: {verb} -> {asset.file}")
+    if not results:
+        print("nothing to do")
+    return 1 if failed else 0
+
+
+def _draw(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    results = [(a, pipeline.draw(loaded, a)) for a in _sources(loaded, args.ids, "claude")]
+    return _report(results, "drawn")
+
+
+def _export(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    assets = _sources(loaded, args.ids, "self")
+    exe = aseprite.find() if assets else None
+    results = [(a, pipeline.export(loaded, a, exe)) for a in assets]
+    return _report(results, "exported")
+
+
+def _check(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    colors = [e.color for e in pipeline.palette_entries(loaded)]
+    assets = pipeline.image_assets(loaded, args.ids)
+    if not args.ids:
+        assets = [a for a in assets if loaded.asset_path(a).exists()]
+    problems = [p for a in assets for p in pipeline.check(loaded, a, colors)]
+    for problem in problems:
+        print(f"- {problem}")
+    print(f"checked {len(assets)} image{'s' if len(assets) != 1 else ''}: "
+          f"{len(problems) or 'no'} problem{'s' if len(problems) != 1 else ''}")
+    return 1 if problems else 0
+
+
+def _preview(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    items = pipeline.preview_items(loaded, pipeline.image_assets(loaded, args.ids))
+    art.preview(items, scale=max(1, args.scale), columns=max(1, args.columns)).save(args.out)
+    print(f"wrote {args.out} ({len(items)} images)")
     return 0

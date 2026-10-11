@@ -33,6 +33,8 @@ SOURCES = {
 # Sources that need a license entry before the asset counts as usable.
 LICENSED_SOURCES = {"pack", "library", "commission"}
 STATUSES = ["todo", "draft", "done"]
+# Where each source's editable file lives unless an asset sets `src`.
+DEFAULT_SOURCES = {"claude": "art/{id}.yaml", "self": "art/{id}.aseprite"}
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 
 
@@ -46,6 +48,7 @@ class Asset:
     size: list[int] | None = None
     frames: dict[str, int] = field(default_factory=dict)
     replaces: str = ""
+    src: str = ""
     license: dict[str, str] = field(default_factory=dict)
     notes: str = ""
 
@@ -74,6 +77,13 @@ class Manifest:
 
     def asset_path(self, asset: Asset) -> Path:
         return self.output_dir() / asset.file
+
+    def source_path(self, asset: Asset) -> Path | None:
+        """The editable source file: `src` if set, else art/<id>.yaml (claude) or art/<id>.aseprite (self)."""
+        if asset.src:
+            return self.root / asset.src
+        default = DEFAULT_SOURCES.get(asset.source)
+        return self.root / default.format(id=asset.id) if default else None
 
 
 class ManifestError(Exception):
@@ -116,6 +126,7 @@ def _asset_from_dict(raw: dict) -> Asset:
         size=list(size) if isinstance(size, list) else size,
         frames=dict(frames) if isinstance(frames, dict) else frames,
         replaces=str(raw.get("replaces", "") or ""),
+        src=str(raw.get("src", "") or ""),
         license=dict(raw.get("license") or {}),
         notes=str(raw.get("notes", "") or ""),
     )

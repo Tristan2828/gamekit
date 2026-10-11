@@ -9,6 +9,7 @@
 #   size      [width, height] in pixels (images only; one frame for sprites)
 #   frames    animation name -> frame count, e.g. {idle: 4, walk: 6} (sprites only)
 #   replaces  optional: what this replaces in the game today (sprite / sound name)
+#   src       optional: editable source file; default art/<id>.yaml (claude), art/<id>.aseprite (self)
 #   license   {name, author, url}: required for pack / library / commission once not todo
 #   notes     anything else (style hints, where it's used)
 game: My Game
