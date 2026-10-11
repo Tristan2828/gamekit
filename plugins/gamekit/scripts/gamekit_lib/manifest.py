@@ -34,7 +34,7 @@ SOURCES = {
 LICENSED_SOURCES = {"pack", "library", "commission"}
 STATUSES = ["todo", "draft", "done"]
 # Where each source's editable file lives unless an asset sets `src`.
-DEFAULT_SOURCES = {"claude": "art/{id}.yaml", "self": "art/{id}.aseprite"}
+DEFAULT_SOURCES = {"claude": "art/{id}.yaml", "self": "art/{id}.aseprite", "sfxr": "sounds/{id}.yaml"}
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 
 
@@ -79,7 +79,7 @@ class Manifest:
         return self.output_dir() / asset.file
 
     def source_path(self, asset: Asset) -> Path | None:
-        """The editable source file: `src` if set, else art/<id>.yaml (claude) or art/<id>.aseprite (self)."""
+        """The editable source file: `src` if set, else the default for the asset's source (DEFAULT_SOURCES)."""
         if asset.src:
             return self.root / asset.src
         default = DEFAULT_SOURCES.get(asset.source)

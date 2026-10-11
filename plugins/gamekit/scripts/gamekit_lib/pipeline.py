@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from PIL import Image
 
-from . import art, aseprite
+from . import art, aseprite, audio, sfxr
 from .manifest import KINDS, Asset, Manifest
 from .palette import Color, Entry, load_entries
 
@@ -53,6 +53,8 @@ def export(manifest: Manifest, asset: Asset, exe: str | None = None) -> list[str
 def check(manifest: Manifest, asset: Asset, colors: list[Color]) -> list[str]:
     """Problems with an asset's finished PNG: missing file, wrong size or frames, off-palette colors."""
     path = manifest.asset_path(asset)
+    if path.suffix.lower() == ".wav":
+        return check_wav(manifest, asset)
     if path.suffix.lower() != ".png":
         return []
     if not path.exists():
@@ -99,3 +101,64 @@ def preview_items(manifest: Manifest, assets: list[Asset]) -> list[tuple[str, Im
             with Image.open(path) as image:
                 items.append((a.id, image.convert("RGBA")))
     return items
+
+
+SFX_MAX_SECONDS = 5.0
+
+
+def check_wav(manifest: Manifest, asset: Asset) -> list[str]:
+    """Problems with a sound effect file: format, length, clipping, silence."""
+    path = manifest.asset_path(asset)
+    if not path.exists():
+        return [f"{asset.id}: {manifest.output}/{asset.file} doesn't exist yet"]
+    try:
+        channels, bits, rate, seconds = audio.wav_format(path)
+    except audio.AudioError as error:
+        return [f"{asset.id}: {error}"]
+    problems = []
+    if channels != 1:
+        problems.append(f"{asset.id}: {channels} channels; sound effects should be mono (run `sfx clean`)")
+    if bits != 16:
+        problems.append(f"{asset.id}: {bits}-bit; expected 16-bit")
+    if rate not in (44100, 48000):
+        problems.append(f"{asset.id}: {rate} Hz; expected 44100 or 48000")
+    if asset.kind == "sfx" and seconds > SFX_MAX_SECONDS:
+        problems.append(f"{asset.id}: {seconds:.1f} s long; sound effects are usually under {SFX_MAX_SECONDS:.0f} s")
+    info = audio.describe(audio.read(path))
+    if info.peak_db < -60:
+        problems.append(f"{asset.id}: silent")
+    elif info.clipped > 10:
+        problems.append(f"{asset.id}: {info.clipped} clipped samples (distorted); run `sfx clean` to lower it")
+    return problems
+
+
+def sfx_source(manifest: Manifest, asset: Asset):
+    src = manifest.source_path(asset)
+    if src is None or src.suffix.lower() not in (".yaml", ".yml"):
+        raise audio.AudioError(f"{asset.id}: no sfxr parameter file (set source: sfxr, or src: sounds/<id>.yaml)")
+    return src
+
+
+def make_sfx(manifest: Manifest, asset: Asset, peak_db: float = -1.0) -> list[str]:
+    """Renders an sfxr parameter file into the asset's WAV (cleaned); returns check problems."""
+    src = sfx_source(manifest, asset)
+    if not src.exists():
+        raise audio.AudioError(f"{src} not found; create it with `gamekit sfx new {asset.id} --preset <name>`")
+    try:
+        params = sfxr.load(src)
+    except ValueError as error:
+        raise audio.AudioError(str(error)) from None
+    out = manifest.asset_path(asset)
+    if out.suffix.lower() != ".wav":
+        raise audio.AudioError(f"{asset.id}: sfxr makes .wav files, but file is {asset.file}")
+    audio.write_wav(out, audio.clean(sfxr.render(params), peak_db=peak_db))
+    return check_wav(manifest, asset)
+
+
+def clean_into(manifest: Manifest, asset: Asset, source, do_trim: bool = True, peak_db: float = -1.0) -> list[str]:
+    """Any sound file -> the asset's cleaned WAV; returns check problems."""
+    out = manifest.asset_path(asset)
+    if out.suffix.lower() != ".wav":
+        raise audio.AudioError(f"{asset.id}: clean writes .wav files, but file is {asset.file}")
+    audio.write_wav(out, audio.clean(audio.read(source), do_trim=do_trim, peak_db=peak_db))
+    return check_wav(manifest, asset)

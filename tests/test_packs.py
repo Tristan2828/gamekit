@@ -165,17 +165,29 @@ class PackTests(unittest.TestCase):
         self.assertIn("license.name (e.g. CC0, CC-BY 4.0) in its pack.yaml", out)
         self.assertIn("no pack named 'nope'", out)
 
-    def test_audio_copy_needs_matching_type(self) -> None:
-        (self.download / "boom.wav").write_bytes(b"RIFF")
-        (self.download / "boom.mp3").write_bytes(b"ID3")
+    def test_audio_from_pack_is_cleaned(self) -> None:
+        import math
+        import wave
+        with wave.open(str(self.download / "boom.wav"), "wb") as w:  # stereo 22050 Hz with silence around
+            w.setnchannels(2)
+            w.setsampwidth(2)
+            w.setframerate(22050)
+            frames = bytearray(4 * 2000)
+            for i in range(2000):
+                v = int(8000 * math.sin(i / 5)).to_bytes(2, "little", signed=True)
+                frames += v + v
+            w.writeframes(bytes(frames) + bytes(4 * 2000))
+        (self.download / "notes.txt").write_text("x", encoding="utf-8")
         self.write_manifest("  - {id: boom, kind: sfx, source: library, file: sfx/boom.wav}\n")
         self.run_cli("pack", "add", str(self.download), "s", "--license", "CC0", "--author", "Kenney")
-        code, out = self.run_cli("pack", "use", "s", "boom.mp3", "boom")
+        code, out = self.run_cli("pack", "use", "s", "notes.txt", "boom")
         self.assertEqual(code, 1)
-        self.assertIn("convert it first", out)
+        self.assertIn("not a sound file", out)
         code, out = self.run_cli("pack", "use", "s", "boom.wav", "boom")
         self.assertEqual(code, 0, out)
-        self.assertTrue((self.root / "assets" / "sfx" / "boom.wav").exists())
+        with wave.open(str(self.root / "assets" / "sfx" / "boom.wav"), "rb") as w:
+            self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 44100))
+            self.assertLess(w.getnframes(), 4500)  # 2000 samples at 22050 Hz -> ~4000, silence trimmed
         self.assertIn("source: pack, status: draft, license: {pack: s}", out)
 
     def test_use_refuses_paths_outside_pack(self) -> None:

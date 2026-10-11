@@ -6,7 +6,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import art, aseprite, credits, manifest, packs, palette, pipeline
+from . import art, aseprite, audio, credits, manifest, packs, palette, pipeline, sfxr
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -35,8 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     export = commands.add_parser("export", help="export .aseprite files with the Aseprite CLI")
     export.add_argument("ids", nargs="*", help="asset ids (default: every source: self asset with a source file)")
 
-    check = commands.add_parser("check", help="check finished images: size, frames, palette")
-    check.add_argument("ids", nargs="*", help="asset ids (default: every image asset whose file exists)")
+    check = commands.add_parser("check", help="check finished files: image size, frames, palette; sound format")
+    check.add_argument("ids", nargs="*", help="asset ids (default: every image and .wav asset whose file exists)")
 
     show = commands.add_parser("preview", help="write a scaled-up contact sheet of finished images")
     show.add_argument("ids", nargs="*", help="asset ids (default: every image asset whose file exists)")
@@ -71,13 +71,40 @@ def main(argv: list[str] | None = None) -> int:
     pack_use.add_argument("--recolor", action="store_true", help="snap colors to the manifest palette")
     pack_use.add_argument("--force", action="store_true", help="overwrite an existing asset file")
 
+    sfx = commands.add_parser("sfx", help="make sound effects (sfxr) and clean up sound files")
+    sfx_commands = sfx.add_subparsers(dest="sfx_command", required=True)
+    sfx_new = sfx_commands.add_parser("new", help="start sounds/<id>.yaml from an sfxr preset")
+    sfx_new.add_argument("asset", help="asset id in the manifest")
+    sfx_new.add_argument("--preset", choices=sfxr.PRESETS, help="sfxr preset")
+    sfx_new.add_argument("--seed", type=int, default=1, help="which random variation of the preset")
+    sfx_new.add_argument("--from", dest="from_file", help="copy parameters from this .yaml (e.g. a variant)")
+    sfx_new.add_argument("--force", action="store_true", help="replace an existing parameter file")
+    sfx_make = sfx_commands.add_parser("make", help="render sfxr parameter files to WAV")
+    sfx_make.add_argument("ids", nargs="*", help="asset ids (default: every source: sfxr asset with a .yaml)")
+    sfx_make.add_argument("--peak", type=float, default=-1.0, help="peak level in dBFS (default -1)")
+    sfx_variants = sfx_commands.add_parser("variants", help="write several versions to listen to and pick from")
+    sfx_variants.add_argument("asset")
+    sfx_variants.add_argument("--count", type=int, default=5)
+    sfx_variants.add_argument("--preset", choices=sfxr.PRESETS,
+                              help="fresh seeds of a preset (default: small changes to the current sound)")
+    sfx_variants.add_argument("--amount", type=float, default=0.05, help="how much to change (default 0.05)")
+    sfx_clean = sfx_commands.add_parser("clean", help="any sound file -> trimmed, normalized mono 16-bit WAV")
+    sfx_clean.add_argument("source", help="sound file (wav, mp3, ogg, flac...)")
+    sfx_clean.add_argument("asset", help="asset id in the manifest")
+    sfx_clean.add_argument("--no-trim", action="store_true", help="keep silence at the start and end")
+    sfx_clean.add_argument("--peak", type=float, default=-1.0, help="peak level in dBFS (default -1)")
+    sfx_clean.add_argument("--force", action="store_true", help="overwrite an existing asset file")
+    sfx_info = sfx_commands.add_parser("info", help="describe sounds in numbers (length, level, brightness, shape)")
+    sfx_info.add_argument("targets", nargs="+", help="asset ids or sound file paths")
+
     args = parser.parse_args(argv)
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
-                "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack}
+                "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
+                "sfx": _sfx}
     try:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
-            packs.PackError) as error:
+            packs.PackError, audio.AudioError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -203,13 +230,15 @@ def _export(args: argparse.Namespace) -> int:
 def _check(args: argparse.Namespace) -> int:
     loaded = manifest.load(args.manifest)
     colors = [e.color for e in pipeline.palette_entries(loaded)]
-    assets = pipeline.image_assets(loaded, args.ids)
-    if not args.ids:
-        assets = [a for a in assets if loaded.asset_path(a).exists()]
+    if args.ids:
+        assets = pipeline.image_assets(loaded, args.ids)
+    else:
+        assets = [a for a in loaded.assets if loaded.asset_path(a).suffix.lower() in (".png", ".wav")
+                  and loaded.asset_path(a).exists()]
     problems = [p for a in assets for p in pipeline.check(loaded, a, colors)]
     for problem in problems:
         print(f"- {problem}")
-    print(f"checked {len(assets)} image{'s' if len(assets) != 1 else ''}: "
+    print(f"checked {len(assets)} file{'s' if len(assets) != 1 else ''}: "
           f"{len(problems) or 'no'} problem{'s' if len(problems) != 1 else ''}")
     return 1 if problems else 0
 
@@ -329,10 +358,17 @@ def _pack_use(args: argparse.Namespace, root: Path) -> int:
         raise packs.PackError(f"{out} already exists; add --force to replace it")
     out_suffix = out.suffix.lower()
 
-    if out_suffix in (".wav", ".ogg"):
+    if out_suffix == ".wav":
+        if source.suffix.lower() not in packs.AUDIO_TYPES:
+            raise packs.PackError(f"{source.name} is not a sound file")
+        problems = pipeline.clean_into(loaded, asset, source)
+        print(f"{asset.id}: {pack.name}/{args.file} -> {asset.file} (trimmed, normalized, mono 16-bit)")
+        for problem in problems:
+            print(f"  - {problem}")
+    elif out_suffix == ".ogg":
         if source.suffix.lower() != out_suffix:
-            raise packs.PackError(f"{source.name} is {source.suffix}, the asset wants {out_suffix}; "
-                                  "convert it first (the sound clean-up step does this)")
+            raise packs.PackError(f"{source.name} is {source.suffix}, the asset wants .ogg; "
+                                  "convert it first (music conversion comes with the music step)")
         out.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, out)
         print(f"{asset.id}: copied {pack.name}/{args.file} -> {asset.file}")
@@ -359,3 +395,101 @@ def _pack_use(args: argparse.Namespace, root: Path) -> int:
         print(f"now update {asset.id} in {Path(args.manifest).name}:")
         print(f"  source: pack, status: draft, license: {{pack: {pack.name}}}")
     return 0
+
+
+def _sfx(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    return {"new": _sfx_new, "make": _sfx_make, "variants": _sfx_variants,
+            "clean": _sfx_clean, "info": _sfx_info}[args.sfx_command](args, loaded)
+
+
+def _asset(loaded: manifest.Manifest, asset_id: str) -> manifest.Asset:
+    for a in loaded.assets:
+        if a.id == asset_id:
+            return a
+    raise audio.AudioError(f"{asset_id!r} is not in the manifest")
+
+
+def _sfx_new(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    asset = _asset(loaded, args.asset)
+    src = pipeline.sfx_source(loaded, asset)
+    if src.exists() and not args.force:
+        raise audio.AudioError(f"{src} already exists; add --force to replace it")
+    if args.from_file:
+        try:
+            params, name = sfxr.load(Path(args.from_file)), ""
+        except (OSError, ValueError) as error:
+            raise audio.AudioError(str(error)) from None
+    elif args.preset:
+        params, name = sfxr.preset(args.preset, args.seed), args.preset
+    else:
+        raise audio.AudioError("give --preset <name> or --from <file.yaml>")
+    sfxr.save(src, params, name)
+    problems = pipeline.make_sfx(loaded, asset)
+    print(f"{asset.id}: wrote {src.relative_to(loaded.root).as_posix()} and {asset.file}")
+    _print_info(asset.id, loaded.asset_path(asset))
+    for problem in problems:
+        print(f"  - {problem}")
+    return 0
+
+
+def _sfx_make(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    if args.ids:
+        assets = [_asset(loaded, i) for i in args.ids]
+    else:
+        assets = [a for a in loaded.assets if a.source == "sfxr"
+                  and (src := loaded.source_path(a)) is not None and src.exists()]
+    results = [(a, pipeline.make_sfx(loaded, a, args.peak)) for a in assets]
+    return _report(results, "rendered")
+
+
+def _sfx_variants(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    asset = _asset(loaded, args.asset)
+    src = pipeline.sfx_source(loaded, asset)
+    if not args.preset and not src.exists():
+        raise audio.AudioError(f"{src} not found: give --preset, or start one with `sfx new`")
+    base = sfxr.load(src) if not args.preset else None
+    folder = src.parent / "variants"
+    for n in range(1, max(1, args.count) + 1):
+        if args.preset:
+            params = sfxr.preset(args.preset, n)
+        else:
+            params = sfxr.mutate(base, seed=base.seed * 1000 + n, amount=args.amount)
+        stem = folder / f"{asset.id}_{n}"
+        sfxr.save(stem.with_suffix(".yaml"), params, args.preset or "")
+        audio.write_wav(stem.with_suffix(".wav"), audio.clean(sfxr.render(params)))
+        _print_info(stem.name, stem.with_suffix(".wav"))
+    rel = folder.relative_to(loaded.root).as_posix()
+    print(f"listen to {rel}/{asset.id}_*.wav; keep one with:")
+    print(f"  gamekit sfx new {asset.id} --from {rel}/{asset.id}_<n>.yaml --force")
+    return 0
+
+
+def _sfx_clean(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    asset = _asset(loaded, args.asset)
+    out = loaded.asset_path(asset)
+    if out.exists() and not args.force:
+        raise audio.AudioError(f"{out} already exists; add --force to replace it")
+    problems = pipeline.clean_into(loaded, asset, Path(args.source), not args.no_trim, args.peak)
+    print(f"{asset.id}: {args.source} -> {asset.file}")
+    _print_info(asset.id, out)
+    for problem in problems:
+        print(f"  - {problem}")
+    if asset.source in manifest.LICENSED_SOURCES and not asset.license:
+        print(f"  remember: record where it came from and its license for {asset.id} in the manifest")
+    return 0
+
+
+def _sfx_info(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    by_id = {a.id: a for a in loaded.assets}
+    for target in args.targets:
+        path = loaded.asset_path(by_id[target]) if target in by_id else Path(target)
+        _print_info(target, path)
+    return 0
+
+
+def _print_info(name: str, path: Path) -> None:
+    info = audio.describe(audio.read(path))
+    print(f"  {name}: {info.seconds:.2f} s, peak {info.peak_db:.1f} dB, loudness (RMS) {info.rms_db:.1f} dB, "
+          f"attack {info.attack_ms:.0f} ms, brightness {info.brightness:.0f}/s")
+    print(f"  shape |{audio.envelope_bar(info.envelope)}|")
