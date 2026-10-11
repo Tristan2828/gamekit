@@ -17,6 +17,8 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" preview <id> --scale 8 -o prev
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" check <id>
 ```
 
+If `assets.yaml` sets `frame_files: true`, animated sprites are written as one PNG per frame (`<name>.png` = idle frame 0, `<name>_1.png`, `<name>_walk_1.png`, `<name>_attack.png`...) instead of a sheet + `.json`; `check` and `preview` handle both.
+
 ## Text sprite format (`art/<id>.yaml`, or the asset's `src`)
 
 ```yaml

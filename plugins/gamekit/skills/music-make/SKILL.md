@@ -21,6 +21,8 @@ Music comes out as Ogg Vorbis, 44100 Hz (stereo kept), quality 5. It is never tr
 loop stays seamless; -16 LUFS is a common level for game music. Music loops unless the asset
 says `loop: false`.
 
+Loudness comes from `audio.music_lufs` in `assets.yaml` unless `--loudness` is given (`music clean` falls back to -16 LUFS; `music render` to the game's own mix).
+
 ## The game's own music (`source: synth`)
 
 `music render` runs the game's Godot render script, which must write `<out>/<track>.wav` for every

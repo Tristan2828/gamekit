@@ -18,6 +18,11 @@
 game: My Game
 output: assets          # folder for finished files, next to this manifest
 palette: palette.hex    # every image is checked against these colors
+# frame_files: true     # one PNG per animation frame (hero.png, hero_1.png, hero_walk_1.png, hero_attack.png)
+#                       # instead of one sheet + .json per sprite
+# audio:                # house levels used by sfx / music commands unless a flag overrides them
+#   sfx_peak_db: -1     # sound effect peak, dBFS
+#   music_lufs: -16     # music loudness, LUFS (unset: music render keeps the game's own mix)
 # music:                # for `music render` (the game's own code-made music, source: synth)
 #   godot_project: .
 #   render_script: tools/render_music.gd   # start from gamekit's templates/godot/render_music.gd

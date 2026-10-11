@@ -68,7 +68,8 @@ Music comes out as looping Ogg Vorbis; `check` reports clicks and gaps at the lo
 Godot is found via `GAMEKIT_GODOT`, PATH or common install folders.
 
 Animated sprites become a sheet (one row per animation, frames left to right) with a JSON
-sidecar next to the PNG listing each frame's position:
+sidecar next to the PNG listing each frame's position, or, with `frame_files: true` in
+`assets.yaml`, one PNG per frame (`hero.png`, `hero_1.png`, `hero_walk_1.png`, `hero_attack.png`). A sheet's sidecar:
 
 ```json
 {"image": "hero.png", "frame_size": [16, 16], "animations": {"idle": [[0, 0], [16, 0]], "walk": [[0, 16], ...]}}

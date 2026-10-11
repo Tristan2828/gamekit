@@ -20,6 +20,8 @@ A pack is copied to `packs/<name>/files/` exactly as downloaded, with `packs/<na
 holding its license. Assets taken from it say `license: {pack: <name>}` in `assets.yaml`, so
 `validate` and `credits` read the license from the pack.
 
+If `assets.yaml` sets `frame_files: true`, animated sprites are written as one PNG per frame (`<name>.png` = idle frame 0, `<name>_1.png`, `<name>_walk_1.png`, `<name>_attack.png`...) instead of a sheet + `.json`; `check` and `preview` handle both.
+
 ## 1. Add the pack and settle the license
 
 1. `pack add` the zip or folder the user downloaded. Use a short lowercase name

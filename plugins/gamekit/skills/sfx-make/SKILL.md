@@ -23,6 +23,8 @@ Every sound comes out as game-ready WAV: mono, 16-bit, 44100 Hz, silence trimmed
 install it if it's missing). For sounds from an imported pack, use `pack use` instead of
 `sfx clean`: it cleans the same way and keeps the pack's license.
 
+Peak level comes from `audio.sfx_peak_db` in `assets.yaml` (default -1 dBFS) unless `--peak` is given.
+
 ## You can't hear: use the numbers, and let the user listen
 
 `sfx info` (also printed after `new`) describes a sound:

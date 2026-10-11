@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     sfx_new.add_argument("--force", action="store_true", help="replace an existing parameter file")
     sfx_make = sfx_commands.add_parser("make", help="render sfxr parameter files to WAV")
     sfx_make.add_argument("ids", nargs="*", help="asset ids (default: every source: sfxr asset with a .yaml)")
-    sfx_make.add_argument("--peak", type=float, default=-1.0, help="peak level in dBFS (default -1)")
+    sfx_make.add_argument("--peak", type=float, help="peak level in dBFS (default: audio.sfx_peak_db, else -1)")
     sfx_variants = sfx_commands.add_parser("variants", help="write several versions to listen to and pick from")
     sfx_variants.add_argument("asset")
     sfx_variants.add_argument("--count", type=int, default=5)
@@ -92,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     sfx_clean.add_argument("source", help="sound file (wav, mp3, ogg, flac...)")
     sfx_clean.add_argument("asset", help="asset id in the manifest")
     sfx_clean.add_argument("--no-trim", action="store_true", help="keep silence at the start and end")
-    sfx_clean.add_argument("--peak", type=float, default=-1.0, help="peak level in dBFS (default -1)")
+    sfx_clean.add_argument("--peak", type=float, help="peak level in dBFS (default: audio.sfx_peak_db, else -1)")
     sfx_clean.add_argument("--force", action="store_true", help="overwrite an existing asset file")
     sfx_info = sfx_commands.add_parser("info", help="describe sounds in numbers (length, level, brightness, shape)")
     sfx_info.add_argument("targets", nargs="+", help="asset ids or sound file paths")
@@ -101,12 +101,13 @@ def main(argv: list[str] | None = None) -> int:
     music_commands = mus.add_subparsers(dest="music_command", required=True)
     music_render = music_commands.add_parser("render", help="render source: synth tracks with the game's Godot script")
     music_render.add_argument("ids", nargs="*", help="asset ids (default: every source: synth music asset)")
-    music_render.add_argument("--loudness", type=float, help="match this loudness in LUFS (e.g. -16); default: as rendered")
+    music_render.add_argument("--loudness", type=float,
+                              help="match this loudness in LUFS (default: audio.music_lufs, else as rendered)")
     music_render.add_argument("--keep-wav", help="also keep the rendered WAVs in this folder")
     music_clean = music_commands.add_parser("clean", help="any music file -> OGG (44100 Hz), optional cut and loudness")
     music_clean.add_argument("source", help="music file (wav, mp3, ogg, flac...)")
     music_clean.add_argument("asset", help="asset id in the manifest")
-    music_clean.add_argument("--loudness", type=float, default=-16.0, help="target LUFS (default -16)")
+    music_clean.add_argument("--loudness", type=float, help="target LUFS (default: audio.music_lufs, else -16)")
     music_clean.add_argument("--keep-level", action="store_true", help="don't change the loudness")
     music_clean.add_argument("--start", type=float, help="cut: start at this second")
     music_clean.add_argument("--end", type=float, help="cut: end at this second (pick loop points)")
@@ -385,8 +386,9 @@ def _pack_use(args: argparse.Namespace, root: Path) -> int:
     elif out_suffix == ".ogg":
         if source.suffix.lower() not in packs.AUDIO_TYPES:
             raise packs.PackError(f"{source.name} is not a sound file")
-        music.encode_ogg(source, out, loudness=-16.0)
-        print(f"{asset.id}: {pack.name}/{args.file} -> {asset.file} (OGG, -16 LUFS)")
+        lufs = loaded.music_lufs if loaded.music_lufs is not None else -16.0
+        music.encode_ogg(source, out, loudness=lufs)
+        print(f"{asset.id}: {pack.name}/{args.file} -> {asset.file} (OGG, {lufs:g} LUFS)")
         for problem in pipeline.check_ogg(loaded, asset):
             print(f"  - {problem}")
     elif out_suffix == ".png":
@@ -400,7 +402,7 @@ def _pack_use(args: argparse.Namespace, root: Path) -> int:
         if args.recolor:
             image, changed = packs.recolor(image, [e.color for e in pipeline.palette_entries(loaded)])
             print(f"recolored {changed} pixels to the palette")
-        art.save(image, sidecar, out)
+        pipeline.save_image(loaded, asset, image, sidecar)
         print(f"{asset.id}: {pack.name}/{args.file} -> {asset.file}")
         problems = pipeline.check(loaded, asset, [e.color for e in pipeline.palette_entries(loaded)])
         for problem in problems:
@@ -474,7 +476,7 @@ def _sfx_variants(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
             params = sfxr.mutate(base, seed=base.seed * 1000 + n, amount=args.amount)
         stem = folder / f"{asset.id}_{n}"
         sfxr.save(stem.with_suffix(".yaml"), params, args.preset or "")
-        audio.write_wav(stem.with_suffix(".wav"), audio.clean(sfxr.render(params)))
+        audio.write_wav(stem.with_suffix(".wav"), audio.clean(sfxr.render(params), peak_db=loaded.sfx_peak_db))
         _print_info(stem.name, stem.with_suffix(".wav"))
     rel = folder.relative_to(loaded.root).as_posix()
     print(f"listen to {rel}/{asset.id}_*.wav; keep one with:")
@@ -538,8 +540,9 @@ def _music_clean(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
         raise music.MusicError(f"{asset.id}: music files are .ogg, but file is {asset.file}")
     if out.exists() and not args.force:
         raise music.MusicError(f"{out} already exists; add --force to replace it")
-    music.encode_ogg(Path(args.source), out, None if args.keep_level else args.loudness,
-                     start=args.start, end=args.end)
+    lufs = args.loudness if args.loudness is not None else (
+        loaded.music_lufs if loaded.music_lufs is not None else -16.0)
+    music.encode_ogg(Path(args.source), out, None if args.keep_level else lufs, start=args.start, end=args.end)
     print(f"{asset.id}: {args.source} -> {asset.file}")
     _print_music(asset.id, out)
     for problem in pipeline.check_ogg(loaded, asset):

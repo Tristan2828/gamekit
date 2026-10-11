@@ -69,6 +69,38 @@ class Manifest:
     palette: str
     assets: list[Asset]
     music: dict = field(default_factory=dict)
+    frame_files: bool = False
+    audio: dict = field(default_factory=dict)
+
+    @property
+    def sfx_peak_db(self) -> float:
+        return float(self.audio.get("sfx_peak_db", -1.0))
+
+    @property
+    def music_lufs(self) -> float | None:
+        value = self.audio.get("music_lufs")
+        return None if value is None else float(value)
+
+    def frame_paths(self, asset: Asset) -> list[tuple[str, int, Path]]:
+        """With `frame_files: true`, each animation frame is its own PNG next to the asset's file:
+        idle frame 0 is the file itself, more idle frames are <name>_1, <name>_2...; another
+        animation's frames are <name>_<anim>_1, _2... (<name>_<anim> when it has one frame).
+        Empty when the asset is a single image or a sheet."""
+        if not (self.frame_files and asset.kind == "sprite" and isinstance(asset.frames, dict) and asset.frames):
+            return []
+        base = self.asset_path(asset)
+        stem, folder = base.stem, base.parent
+        paths = []
+        for anim, count in asset.frames.items():
+            for i in range(int(count)):
+                if anim == "idle":
+                    name = stem if i == 0 else f"{stem}_{i}"
+                elif count == 1:
+                    name = f"{stem}_{anim}"
+                else:
+                    name = f"{stem}_{anim}_{i + 1}"
+                paths.append((anim, i, folder / f"{name}.png"))
+        return paths
 
     @property
     def root(self) -> Path:
@@ -122,6 +154,8 @@ def load(path: str | Path) -> Manifest:
         palette=str(data.get("palette", "") or ""),
         assets=assets,
         music=dict(data.get("music") or {}) if isinstance(data.get("music") or {}, dict) else {"_bad": True},
+        frame_files=data.get("frame_files", False) is True,
+        audio=dict(data.get("audio") or {}) if isinstance(data.get("audio") or {}, dict) else {"_bad": True},
     )
 
 
@@ -151,6 +185,16 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
         problems.append("music: must be a mapping (godot_project, render_script)")
     elif set(manifest.music) - {"godot_project", "render_script"}:
         problems.append(f"music: unknown keys {sorted(set(manifest.music) - {'godot_project', 'render_script'})}")
+    if manifest.audio.get("_bad"):
+        problems.append("audio: must be a mapping (sfx_peak_db, music_lufs)")
+    else:
+        unknown = set(manifest.audio) - {"sfx_peak_db", "music_lufs"}
+        if unknown:
+            problems.append(f"audio: unknown keys {sorted(unknown)}")
+        for key in ("sfx_peak_db", "music_lufs"):
+            value = manifest.audio.get(key)
+            if value is not None and (not isinstance(value, (int, float)) or value > 0):
+                problems.append(f"audio.{key}: a negative number (dB), got {value!r}")
     seen: set[str] = set()
     for i, a in enumerate(manifest.assets):
         where = f"assets[{i}] ({a.id or 'no id'})"
@@ -184,6 +228,8 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
             problems.append(f"{where}: frames must map animation name -> frame count, e.g. {{walk: 4}}")
         elif a.frames and a.kind != "sprite":
             problems.append(f"{where}: only sprites have animation frames")
+        elif a.frames and manifest.frame_files and "idle" not in a.frames:
+            problems.append(f"{where}: with frame_files, frames need an idle animation (its first frame is the file itself)")
 
         if a.loop is not None and (not isinstance(a.loop, bool) or a.kind != "music"):
             problems.append(f"{where}: loop is true / false, for music only")

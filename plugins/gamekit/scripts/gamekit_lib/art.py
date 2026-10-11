@@ -152,6 +152,13 @@ def build_sheet(animations: dict[str, list[Image.Image]]) -> tuple[Image.Image, 
     return sheet, sidecar
 
 
+def split_sheet(sheet: Image.Image, sidecar: dict) -> dict[str, list[Image.Image]]:
+    """The frames of a sheet, per animation (the inverse of build_sheet)."""
+    w, h = sidecar["frame_size"]
+    return {name: [sheet.crop((x, y, x + w, y + h)) for x, y in spots]
+            for name, spots in sidecar["animations"].items()}
+
+
 def save(image: Image.Image, sidecar: dict | None, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     image.save(out)

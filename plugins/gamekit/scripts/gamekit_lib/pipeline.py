@@ -36,7 +36,7 @@ def draw(manifest: Manifest, asset: Asset) -> list[str]:
         raise art.ArtError(f"{asset.id}: no text sprite source (set src: art/<id>.yaml or source: claude)")
     sprite = art.load_text_sprite(src, entries)
     image, sidecar = art.render(sprite, where=str(src))
-    art.save(image, sidecar, manifest.asset_path(asset))
+    save_image(manifest, asset, image, sidecar)
     return check(manifest, asset, [e.color for e in entries])
 
 
@@ -48,8 +48,37 @@ def export(manifest: Manifest, asset: Asset, exe: str | None = None) -> list[str
     out = manifest.asset_path(asset)
     sidecar = aseprite.export(src, out, exe)
     with Image.open(out) as image:
-        art.save(image.copy(), sidecar, out)
+        save_image(manifest, asset, image.copy(), sidecar)
     return check(manifest, asset, [e.color for e in palette_entries(manifest)])
+
+
+def save_image(manifest: Manifest, asset: Asset, image: Image.Image, sidecar: dict | None) -> None:
+    """Writes an asset's image: a sheet + JSON, or (manifest `frame_files: true`) one PNG per frame."""
+    out = manifest.asset_path(asset)
+    paths = manifest.frame_paths(asset)
+    if not paths or sidecar is None:
+        art.save(image, sidecar, out)
+        return
+    frames = art.split_sheet(image, sidecar)
+    for anim, index, path in paths:
+        if anim in frames and index < len(frames[anim]):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            frames[anim][index].save(path)
+    stale = art.sidecar_path(out)
+    if stale.exists():
+        stale.unlink()
+
+
+def load_frames(manifest: Manifest, asset: Asset) -> dict[str, list[Image.Image]] | None:
+    """An asset's frames from frame files (None if it doesn't use them or one is missing)."""
+    paths = manifest.frame_paths(asset)
+    if not paths or not all(p.exists() for _, _, p in paths):
+        return None
+    frames: dict[str, list[Image.Image]] = {}
+    for anim, _, path in paths:
+        with Image.open(path) as image:
+            frames.setdefault(anim, []).append(image.convert("RGBA"))
+    return frames
 
 
 def check(manifest: Manifest, asset: Asset, colors: list[Color]) -> list[str]:
@@ -68,8 +97,24 @@ def check(manifest: Manifest, asset: Asset, colors: list[Color]) -> list[str]:
         image = image.convert("RGBA")
     sidecar = art.load_sidecar(path)
     size = asset.size if isinstance(asset.size, list) and len(asset.size) == 2 else None
+    frame_paths = manifest.frame_paths(asset)
 
-    if sidecar is not None:
+    if frame_paths:
+        missing = [p.name for _, _, p in frame_paths if not p.exists()]
+        if missing:
+            problems.append(f"{asset.id}: missing frame files {', '.join(missing)}")
+        frames = [p for _, _, p in frame_paths if p.exists()]
+        sizes = {}
+        for frame in frames:
+            with Image.open(frame) as img:
+                sizes[frame.name] = list(img.size)
+        wrong = [f"{n} is {w}x{h}" for n, (w, h) in sizes.items() if size and [w, h] != size]
+        if wrong:
+            problems.append(f"{asset.id}: frames must be {size[0]}x{size[1]}: " + ", ".join(wrong))
+        loaded = load_frames(manifest, asset)
+        if loaded and not wrong:
+            image, _ = art.build_sheet(loaded)  # check the palette across every frame
+    elif sidecar is not None:
         frame_size = sidecar.get("frame_size")
         if size and frame_size != size:
             problems.append(f"{asset.id}: frames are {frame_size[0]}x{frame_size[1]}, manifest says {size[0]}x{size[1]}")
@@ -101,7 +146,10 @@ def preview_items(manifest: Manifest, assets: list[Asset]) -> list[tuple[str, Im
     items: list[tuple[str, Image.Image]] = []
     for a in assets:
         path = manifest.asset_path(a)
-        if path.suffix.lower() == ".png" and path.exists():
+        frames = load_frames(manifest, a)
+        if frames and len({i.size for f in frames.values() for i in f}) == 1:
+            items.append((a.id, art.build_sheet(frames)[0]))
+        elif path.suffix.lower() == ".png" and path.exists():
             with Image.open(path) as image:
                 items.append((a.id, image.convert("RGBA")))
     return items
@@ -143,7 +191,7 @@ def sfx_source(manifest: Manifest, asset: Asset):
     return src
 
 
-def make_sfx(manifest: Manifest, asset: Asset, peak_db: float = -1.0) -> list[str]:
+def make_sfx(manifest: Manifest, asset: Asset, peak_db: float | None = None) -> list[str]:
     """Renders an sfxr parameter file into the asset's WAV (cleaned); returns check problems."""
     src = sfx_source(manifest, asset)
     if not src.exists():
@@ -155,16 +203,19 @@ def make_sfx(manifest: Manifest, asset: Asset, peak_db: float = -1.0) -> list[st
     out = manifest.asset_path(asset)
     if out.suffix.lower() != ".wav":
         raise audio.AudioError(f"{asset.id}: sfxr makes .wav files, but file is {asset.file}")
-    audio.write_wav(out, audio.clean(sfxr.render(params), peak_db=peak_db))
+    peak = manifest.sfx_peak_db if peak_db is None else peak_db
+    audio.write_wav(out, audio.clean(sfxr.render(params), peak_db=peak))
     return check_wav(manifest, asset)
 
 
-def clean_into(manifest: Manifest, asset: Asset, source, do_trim: bool = True, peak_db: float = -1.0) -> list[str]:
+def clean_into(manifest: Manifest, asset: Asset, source, do_trim: bool = True,
+               peak_db: float | None = None) -> list[str]:
     """Any sound file -> the asset's cleaned WAV; returns check problems."""
     out = manifest.asset_path(asset)
     if out.suffix.lower() != ".wav":
         raise audio.AudioError(f"{asset.id}: clean writes .wav files, but file is {asset.file}")
-    audio.write_wav(out, audio.clean(audio.read(source), do_trim=do_trim, peak_db=peak_db))
+    peak = manifest.sfx_peak_db if peak_db is None else peak_db
+    audio.write_wav(out, audio.clean(audio.read(source), do_trim=do_trim, peak_db=peak))
     return check_wav(manifest, asset)
 
 
@@ -203,6 +254,8 @@ def render_music(manifest: Manifest, assets: list[Asset], godot: str, loudness: 
     script = manifest.music.get("render_script")
     if not script:
         raise music.MusicError("set music.render_script in assets.yaml (the game's Godot script that writes WAVs)")
+    if loudness is None:
+        loudness = manifest.music_lufs
     project = manifest.root / str(manifest.music.get("godot_project", "."))
     for a in assets:
         if not a.file.lower().endswith(".ogg"):

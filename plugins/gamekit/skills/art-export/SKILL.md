@@ -17,6 +17,8 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" preview [ids...] --scale 4 -o 
 `export` with no ids exports every `source: self` asset whose `.aseprite` file exists.
 It never edits `.aseprite` files; they are the user's work.
 
+If `assets.yaml` sets `frame_files: true`, animated sprites are written as one PNG per frame (`<name>.png` = idle frame 0, `<name>_1.png`, `<name>_walk_1.png`, `<name>_attack.png`...) instead of a sheet + `.json`; `check` and `preview` handle both.
+
 ## Aseprite setup
 
 - Aseprite runs on the user's own computer. In a cloud session it's not installed: say so and
