@@ -37,6 +37,7 @@ Optional programs: Aseprite (exporting your own art), ffmpeg (mp3 / ogg / flac s
 | `/gamekit:art-export` | Export your `.aseprite` files with the Aseprite CLI; check any image's size, frames and palette |
 | `/gamekit:pack-import` | Import a downloaded pack, record its license, and cut sprites, frames or sounds out of it |
 | `/gamekit:sfx-make` | Generate retro sound effects (sfxr presets), tweak and audition variants, or clean up downloaded sounds |
+| `/gamekit:music-make` | Render the game's own music through Godot, or convert downloaded / AI music, into looping OGGs with checked loop points |
 
 The same tools work without Claude, from the game's folder:
 
@@ -55,10 +56,16 @@ python <gamekit>/plugins/gamekit/scripts/gamekit.py sfx new <asset> --preset exp
 python <gamekit>/plugins/gamekit/scripts/gamekit.py sfx variants <asset> --count 5               # versions to listen to
 python <gamekit>/plugins/gamekit/scripts/gamekit.py sfx clean <file> <asset>                     # any sound -> clean WAV
 python <gamekit>/plugins/gamekit/scripts/gamekit.py sfx info <asset-or-file>
+python <gamekit>/plugins/gamekit/scripts/gamekit.py music render [assets]                       # game's Godot script -> OGG
+python <gamekit>/plugins/gamekit/scripts/gamekit.py music clean <file> <asset> --end 64.0        # any music -> OGG, -16 LUFS
+python <gamekit>/plugins/gamekit/scripts/gamekit.py music info <asset-or-file>
 ```
 
 Sound effects come out as mono 16-bit 44100 Hz WAV, trimmed and normalized to -1 dBFS.
-Reading mp3 / ogg / flac needs [ffmpeg](https://ffmpeg.org) (Windows: `winget install ffmpeg`).
+Reading mp3 / ogg / flac and making music needs [ffmpeg](https://ffmpeg.org) (Windows: `winget install ffmpeg`).
+Music comes out as looping Ogg Vorbis; `check` reports clicks and gaps at the loop point.
+`music render` runs the game's own Godot script (template: `plugins/gamekit/templates/godot/render_music.gd`);
+Godot is found via `GAMEKIT_GODOT`, PATH or common install folders.
 
 Animated sprites become a sheet (one row per animation, frames left to right) with a JSON
 sidecar next to the PNG listing each frame's position:
@@ -75,8 +82,8 @@ sidecar next to the PNG listing each frame's position:
 | 2 | Art: Claude's text-row sprites → PNG on the palette, palette check, preview sheet, Aseprite CLI export | ✅ done |
 | 3 | Pack import: unzip, record license, crop / slice / resize / recolor into assets | ✅ done |
 | 4 | Sound effects: sfxr generator with presets and variants, clean-up of any sound file to WAV, sound checks | ✅ done |
-| 5 | Music: render text scores with Godot headless, export looping OGG | next |
-| 6 | First real use: GameTest's first batch (heroes, enemies, floors) | |
+| 5 | Music: render the game's scores with Godot headless or convert music files, looping OGG, loudness, loop checks | ✅ done |
+| 6 | First real use: GameTest's first batch (heroes, enemies, floors) | next |
 
 ## Develop
 

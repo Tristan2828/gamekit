@@ -12,7 +12,7 @@ prefer simple, readable solutions. First user: the Godot game `Tristan2828/GameT
   - `skills/<name>/SKILL.md`: one per workflow. Reference bundled files as `${CLAUDE_PLUGIN_ROOT}/...`
     (substituted when the skill loads; it is NOT an environment variable in Bash).
   - `scripts/gamekit.py`: CLI entry; logic in `scripts/gamekit_lib/` (one module per concern).
-  - `templates/`: files `gamekit init` copies into a game.
+  - `templates/`: files `gamekit init` copies into a game, plus `godot/render_music.gd` for `music render`.
 - `tests/`: `unittest` tests (no pytest needed).
 
 ## Rules

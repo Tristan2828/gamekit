@@ -1,9 +1,11 @@
-"""Manifest-aware art steps: draw (text sprite -> PNG), export (Aseprite), check, preview."""
+"""Manifest-aware steps: draw, export, check (images, sounds, music), sound and music rendering."""
 from __future__ import annotations
+
+from pathlib import Path
 
 from PIL import Image
 
-from . import art, aseprite, audio, sfxr
+from . import art, aseprite, audio, music, sfxr
 from .manifest import KINDS, Asset, Manifest
 from .palette import Color, Entry, load_entries
 
@@ -55,6 +57,8 @@ def check(manifest: Manifest, asset: Asset, colors: list[Color]) -> list[str]:
     path = manifest.asset_path(asset)
     if path.suffix.lower() == ".wav":
         return check_wav(manifest, asset)
+    if path.suffix.lower() == ".ogg":
+        return check_ogg(manifest, asset)
     if path.suffix.lower() != ".png":
         return []
     if not path.exists():
@@ -162,3 +166,55 @@ def clean_into(manifest: Manifest, asset: Asset, source, do_trim: bool = True, p
         raise audio.AudioError(f"{asset.id}: clean writes .wav files, but file is {asset.file}")
     audio.write_wav(out, audio.clean(audio.read(source), do_trim=do_trim, peak_db=peak_db))
     return check_wav(manifest, asset)
+
+
+def check_ogg(manifest: Manifest, asset: Asset, loop_source: Path | None = None) -> list[str]:
+    """Problems with a music file: not Ogg Vorbis, silent, clipping, or a loop that won't be seamless."""
+    path = manifest.asset_path(asset)
+    if not path.exists():
+        return [f"{asset.id}: {manifest.output}/{asset.file} doesn't exist yet"]
+    with open(path, "rb") as f:
+        if f.read(4) != b"OggS":
+            return [f"{asset.id}: {asset.file} is not an Ogg file"]
+    info = music.describe(path, loop_source)  # needs ffmpeg to decode
+    problems = []
+    if info.lufs is None or info.lufs < -60:
+        problems.append(f"{asset.id}: silent")
+    if info.true_peak is not None and info.true_peak > 0.0:
+        problems.append(f"{asset.id}: peaks at {info.true_peak:+.1f} dBTP (clips); re-encode with --loudness")
+    if manifest.loops(asset):
+        problems += music.seam_problems(asset.id, info)
+    return problems
+
+
+def music_assets(manifest: Manifest, ids: list[str]) -> list[Asset]:
+    if ids:
+        by_id = {a.id: a for a in manifest.assets}
+        missing = [i for i in ids if i not in by_id]
+        if missing:
+            raise music.MusicError(f"not in the manifest: {', '.join(missing)}")
+        return [by_id[i] for i in ids]
+    return [a for a in manifest.assets if a.kind == "music" and a.source == "synth"]
+
+
+def render_music(manifest: Manifest, assets: list[Asset], godot: str, loudness: float | None,
+                 keep_wav: Path | None = None) -> list[tuple[Asset, list[str]]]:
+    """Renders the game's scores with its Godot script, then encodes each to the asset's OGG."""
+    script = manifest.music.get("render_script")
+    if not script:
+        raise music.MusicError("set music.render_script in assets.yaml (the game's Godot script that writes WAVs)")
+    project = manifest.root / str(manifest.music.get("godot_project", "."))
+    for a in assets:
+        if not a.file.lower().endswith(".ogg"):
+            raise music.MusicError(f"{a.id}: music files are .ogg, but file is {a.file}")
+    with music.temp_dir() as tmp:
+        out_dir = keep_wav or Path(tmp)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        wavs = music.render_wavs(godot, project.resolve(), str(script),
+                                 [manifest.track_name(a) for a in assets], out_dir.resolve())
+        results = []
+        for a in assets:
+            wav = wavs[manifest.track_name(a)]
+            music.encode_ogg(wav, manifest.asset_path(a), loudness)
+            results.append((a, check_ogg(manifest, a, loop_source=wav)))
+    return results

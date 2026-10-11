@@ -49,6 +49,7 @@ class Asset:
     frames: dict[str, int] = field(default_factory=dict)
     replaces: str = ""
     src: str = ""
+    loop: bool | None = None
     license: dict[str, str] = field(default_factory=dict)
     notes: str = ""
 
@@ -67,6 +68,7 @@ class Manifest:
     output: str
     palette: str
     assets: list[Asset]
+    music: dict = field(default_factory=dict)
 
     @property
     def root(self) -> Path:
@@ -77,6 +79,14 @@ class Manifest:
 
     def asset_path(self, asset: Asset) -> Path:
         return self.output_dir() / asset.file
+
+    def loops(self, asset: Asset) -> bool:
+        """Music loops unless it says `loop: false`."""
+        return asset.kind == "music" and asset.loop is not False
+
+    def track_name(self, asset: Asset) -> str:
+        """The name the game's render script knows a track by."""
+        return asset.replaces or asset.id
 
     def source_path(self, asset: Asset) -> Path | None:
         """The editable source file: `src` if set, else the default for the asset's source (DEFAULT_SOURCES)."""
@@ -111,6 +121,7 @@ def load(path: str | Path) -> Manifest:
         output=str(data.get("output", "assets")),
         palette=str(data.get("palette", "") or ""),
         assets=assets,
+        music=dict(data.get("music") or {}) if isinstance(data.get("music") or {}, dict) else {"_bad": True},
     )
 
 
@@ -127,6 +138,7 @@ def _asset_from_dict(raw: dict) -> Asset:
         frames=dict(frames) if isinstance(frames, dict) else frames,
         replaces=str(raw.get("replaces", "") or ""),
         src=str(raw.get("src", "") or ""),
+        loop=raw.get("loop"),
         license=dict(raw.get("license") or {}),
         notes=str(raw.get("notes", "") or ""),
     )
@@ -135,6 +147,10 @@ def _asset_from_dict(raw: dict) -> Asset:
 def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
     """Returns a list of problems; empty means the manifest is valid."""
     problems: list[str] = []
+    if manifest.music.get("_bad"):
+        problems.append("music: must be a mapping (godot_project, render_script)")
+    elif set(manifest.music) - {"godot_project", "render_script"}:
+        problems.append(f"music: unknown keys {sorted(set(manifest.music) - {'godot_project', 'render_script'})}")
     seen: set[str] = set()
     for i, a in enumerate(manifest.assets):
         where = f"assets[{i}] ({a.id or 'no id'})"
@@ -168,6 +184,9 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
             problems.append(f"{where}: frames must map animation name -> frame count, e.g. {{walk: 4}}")
         elif a.frames and a.kind != "sprite":
             problems.append(f"{where}: only sprites have animation frames")
+
+        if a.loop is not None and (not isinstance(a.loop, bool) or a.kind != "music"):
+            problems.append(f"{where}: loop is true / false, for music only")
 
         if a.source in LICENSED_SOURCES and a.status != "todo":
             try:

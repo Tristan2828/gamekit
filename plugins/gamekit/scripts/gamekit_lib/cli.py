@@ -6,7 +6,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import art, aseprite, audio, credits, manifest, packs, palette, pipeline, sfxr
+from . import art, aseprite, audio, credits, manifest, music, packs, palette, pipeline, sfxr
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     export.add_argument("ids", nargs="*", help="asset ids (default: every source: self asset with a source file)")
 
     check = commands.add_parser("check", help="check finished files: image size, frames, palette; sound format")
-    check.add_argument("ids", nargs="*", help="asset ids (default: every image and .wav asset whose file exists)")
+    check.add_argument("ids", nargs="*", help="asset ids (default: every image, .wav and .ogg asset whose file exists)")
 
     show = commands.add_parser("preview", help="write a scaled-up contact sheet of finished images")
     show.add_argument("ids", nargs="*", help="asset ids (default: every image asset whose file exists)")
@@ -97,14 +97,31 @@ def main(argv: list[str] | None = None) -> int:
     sfx_info = sfx_commands.add_parser("info", help="describe sounds in numbers (length, level, brightness, shape)")
     sfx_info.add_argument("targets", nargs="+", help="asset ids or sound file paths")
 
+    mus = commands.add_parser("music", help="render the game's music scores or import music as looping OGG")
+    music_commands = mus.add_subparsers(dest="music_command", required=True)
+    music_render = music_commands.add_parser("render", help="render source: synth tracks with the game's Godot script")
+    music_render.add_argument("ids", nargs="*", help="asset ids (default: every source: synth music asset)")
+    music_render.add_argument("--loudness", type=float, help="match this loudness in LUFS (e.g. -16); default: as rendered")
+    music_render.add_argument("--keep-wav", help="also keep the rendered WAVs in this folder")
+    music_clean = music_commands.add_parser("clean", help="any music file -> OGG (44100 Hz), optional cut and loudness")
+    music_clean.add_argument("source", help="music file (wav, mp3, ogg, flac...)")
+    music_clean.add_argument("asset", help="asset id in the manifest")
+    music_clean.add_argument("--loudness", type=float, default=-16.0, help="target LUFS (default -16)")
+    music_clean.add_argument("--keep-level", action="store_true", help="don't change the loudness")
+    music_clean.add_argument("--start", type=float, help="cut: start at this second")
+    music_clean.add_argument("--end", type=float, help="cut: end at this second (pick loop points)")
+    music_clean.add_argument("--force", action="store_true", help="overwrite an existing asset file")
+    music_info = music_commands.add_parser("info", help="length, loudness and how cleanly a track loops")
+    music_info.add_argument("targets", nargs="+", help="asset ids or music file paths")
+
     args = parser.parse_args(argv)
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
                 "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
-                "sfx": _sfx}
+                "sfx": _sfx, "music": _music}
     try:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
-            packs.PackError, audio.AudioError) as error:
+            packs.PackError, audio.AudioError, music.MusicError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -233,7 +250,7 @@ def _check(args: argparse.Namespace) -> int:
     if args.ids:
         assets = pipeline.image_assets(loaded, args.ids)
     else:
-        assets = [a for a in loaded.assets if loaded.asset_path(a).suffix.lower() in (".png", ".wav")
+        assets = [a for a in loaded.assets if loaded.asset_path(a).suffix.lower() in (".png", ".wav", ".ogg")
                   and loaded.asset_path(a).exists()]
     problems = [p for a in assets for p in pipeline.check(loaded, a, colors)]
     for problem in problems:
@@ -366,12 +383,12 @@ def _pack_use(args: argparse.Namespace, root: Path) -> int:
         for problem in problems:
             print(f"  - {problem}")
     elif out_suffix == ".ogg":
-        if source.suffix.lower() != out_suffix:
-            raise packs.PackError(f"{source.name} is {source.suffix}, the asset wants .ogg; "
-                                  "convert it first (music conversion comes with the music step)")
-        out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, out)
-        print(f"{asset.id}: copied {pack.name}/{args.file} -> {asset.file}")
+        if source.suffix.lower() not in packs.AUDIO_TYPES:
+            raise packs.PackError(f"{source.name} is not a sound file")
+        music.encode_ogg(source, out, loudness=-16.0)
+        print(f"{asset.id}: {pack.name}/{args.file} -> {asset.file} (OGG, -16 LUFS)")
+        for problem in pipeline.check_ogg(loaded, asset):
+            print(f"  - {problem}")
     elif out_suffix == ".png":
         if source.suffix.lower() not in packs.IMAGE_TYPES:
             raise packs.PackError(f"{source.name} is not an image")
@@ -493,3 +510,59 @@ def _print_info(name: str, path: Path) -> None:
     print(f"  {name}: {info.seconds:.2f} s, peak {info.peak_db:.1f} dB, loudness (RMS) {info.rms_db:.1f} dB, "
           f"attack {info.attack_ms:.0f} ms, brightness {info.brightness:.0f}/s")
     print(f"  shape |{audio.envelope_bar(info.envelope)}|")
+
+
+def _music(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    return {"render": _music_render, "clean": _music_clean, "info": _music_info}[args.music_command](args, loaded)
+
+
+def _music_render(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    assets = pipeline.music_assets(loaded, args.ids)
+    if not assets:
+        print("nothing to do (no source: synth music in the manifest)")
+        return 0
+    godot = music.find_godot()
+    print(f"rendering {len(assets)} track{'s' if len(assets) != 1 else ''} with {godot}")
+    keep = Path(args.keep_wav) if args.keep_wav else None
+    results = pipeline.render_music(loaded, assets, godot, args.loudness, keep)
+    for asset, _ in results:
+        _print_music(asset.id, loaded.asset_path(asset))
+    return _report(results, "rendered")
+
+
+def _music_clean(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    asset = _asset(loaded, args.asset)
+    out = loaded.asset_path(asset)
+    if out.suffix.lower() != ".ogg":
+        raise music.MusicError(f"{asset.id}: music files are .ogg, but file is {asset.file}")
+    if out.exists() and not args.force:
+        raise music.MusicError(f"{out} already exists; add --force to replace it")
+    music.encode_ogg(Path(args.source), out, None if args.keep_level else args.loudness,
+                     start=args.start, end=args.end)
+    print(f"{asset.id}: {args.source} -> {asset.file}")
+    _print_music(asset.id, out)
+    for problem in pipeline.check_ogg(loaded, asset):
+        print(f"  - {problem}")
+    if asset.source in manifest.LICENSED_SOURCES and not asset.license:
+        print(f"  remember: record where it came from and its license for {asset.id} in the manifest")
+    return 0
+
+
+def _music_info(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    by_id = {a.id: a for a in loaded.assets}
+    for target in args.targets:
+        _print_music(target, loaded.asset_path(by_id[target]) if target in by_id else Path(target))
+    return 0
+
+
+def _print_music(name: str, path: Path) -> None:
+    info = music.describe(path)
+    lufs = f"{info.lufs:.1f} LUFS" if info.lufs is not None else "loudness unknown (ffmpeg?)"
+    peak = f", true peak {info.true_peak:+.1f} dBTP" if info.true_peak is not None else ""
+    print(f"  {name}: {info.seconds:.1f} s, {lufs}{peak}")
+    if not info.exact:
+        print("    loop point: can't be measured exactly for this file (decoder length differs)")
+        return
+    print(f"    loop point: jump {info.seam_jump:.3f} (normal movement {info.edge_motion:.3f}), "
+          f"silence {info.silent_tail:.2f} s at the end + {info.silent_head:.2f} s at the start")
