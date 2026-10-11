@@ -387,8 +387,10 @@ def _pack_use(args: argparse.Namespace, root: Path) -> int:
         if source.suffix.lower() not in packs.AUDIO_TYPES:
             raise packs.PackError(f"{source.name} is not a sound file")
         lufs = loaded.music_lufs if loaded.music_lufs is not None else -16.0
-        music.encode_ogg(source, out, loudness=lufs)
+        note = music.encode_ogg(source, out, loudness=lufs)
         print(f"{asset.id}: {pack.name}/{args.file} -> {asset.file} (OGG, {lufs:g} LUFS)")
+        if note:
+            print(f"  {note}")
         for problem in pipeline.check_ogg(loaded, asset):
             print(f"  - {problem}")
     elif out_suffix == ".png":
@@ -528,9 +530,11 @@ def _music_render(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
     print(f"rendering {len(assets)} track{'s' if len(assets) != 1 else ''} with {godot}")
     keep = Path(args.keep_wav) if args.keep_wav else None
     results = pipeline.render_music(loaded, assets, godot, args.loudness, keep)
-    for asset, _ in results:
+    for asset, _, note in results:
         _print_music(asset.id, loaded.asset_path(asset))
-    return _report(results, "rendered")
+        if note:
+            print(f"    {note}")
+    return _report([(asset, problems) for asset, problems, _ in results], "rendered")
 
 
 def _music_clean(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
@@ -542,8 +546,11 @@ def _music_clean(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
         raise music.MusicError(f"{out} already exists; add --force to replace it")
     lufs = args.loudness if args.loudness is not None else (
         loaded.music_lufs if loaded.music_lufs is not None else -16.0)
-    music.encode_ogg(Path(args.source), out, None if args.keep_level else lufs, start=args.start, end=args.end)
+    note = music.encode_ogg(Path(args.source), out, None if args.keep_level else lufs,
+                            start=args.start, end=args.end)
     print(f"{asset.id}: {args.source} -> {asset.file}")
+    if note:
+        print(f"  {note}")
     _print_music(asset.id, out)
     for problem in pipeline.check_ogg(loaded, asset):
         print(f"  - {problem}")

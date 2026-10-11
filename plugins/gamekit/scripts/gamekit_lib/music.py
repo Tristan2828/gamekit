@@ -7,8 +7,8 @@ Rendering: the game provides a Godot script (assets.yaml `music.render_script`) 
 
 The track name is the asset's `replaces` (its name in the game) or its id. ffmpeg then encodes
 each WAV to Ogg Vorbis. Music is not trimmed or faded (that would break the loop); loudness is
-only changed when asked, with one fixed gain for the whole track (two-pass EBU R128), so the
-loop stays seamless.
+only changed when asked: one fixed gain for the whole track (EBU R128), plus a gentle peak limiter
+when the loudest hits would otherwise clip; the loop stays seamless either way.
 """
 from __future__ import annotations
 
@@ -81,10 +81,22 @@ def render_wavs(godot: str, project: Path, script: str, tracks: list[str], out_d
 
 # --- encoding ---------------------------------------------------------------------------------
 
-def measure_loudness(source: Path, ffmpeg: str | None = None) -> dict[str, float]:
-    """EBU R128 numbers from ffmpeg's loudnorm analysis: integrated LUFS, true peak, range."""
-    command = [ffmpeg or audio.find_ffmpeg(), "-hide_banner", "-nostats", "-i", str(source),
-               "-af", "loudnorm=print_format=json", "-f", "null", "-"]
+def _cut_args(start: float | None, end: float | None) -> list[str]:
+    args = []
+    if start is not None:
+        args += ["-ss", f"{start:.3f}"]
+    if end is not None:
+        args += ["-to", f"{end:.3f}"]
+    return args
+
+
+def measure_loudness(source: Path, ffmpeg: str | None = None, start: float | None = None,
+                     end: float | None = None, filters: str = "") -> dict[str, float]:
+    """EBU R128 numbers from ffmpeg's loudnorm analysis: integrated LUFS, true peak, range.
+    `filters` are applied first, to measure what a filter chain would produce."""
+    chain = (filters + "," if filters else "") + "loudnorm=print_format=json"
+    command = ([ffmpeg or audio.find_ffmpeg(), "-hide_banner", "-nostats"] + _cut_args(start, end)
+               + ["-i", str(source), "-af", chain, "-f", "null", "-"])
     result = subprocess.run(command, capture_output=True, text=True)
     match = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", result.stderr)
     if result.returncode != 0 or not match:
@@ -94,34 +106,52 @@ def measure_loudness(source: Path, ffmpeg: str | None = None) -> dict[str, float
             if data.get(k) not in (None, "-inf", "inf")}
 
 
+PEAK_CEILING_DB = -1.5
+
+
+def limiter(gain_db: float) -> str:
+    """Gain, then a peak limiter at the ceiling (only the loudest hits are touched; no auto level)."""
+    return (f"volume={gain_db:.2f}dB,"
+            f"alimiter=limit={audio.db_to_gain(PEAK_CEILING_DB):.4f}:attack=5:release=50:level=disabled")
+
+
+def loudness_filter(source: Path, target: float, ffmpeg: str, start: float | None = None,
+                    end: float | None = None) -> tuple[str, str]:
+    """The filter that brings `source` to `target` LUFS, and a note for the user.
+    One fixed gain when the peaks allow it; otherwise gain plus a peak limiter, measured and
+    corrected up to three times (the limiter takes a little loudness back)."""
+    m = measure_loudness(source, ffmpeg, start, end)
+    if "input_i" not in m:
+        raise MusicError(f"{source} is silent")
+    gain = target - m["input_i"]
+    if gain <= PEAK_CEILING_DB - m.get("input_tp", -99.0):
+        return f"volume={gain:.2f}dB", ""
+    for _ in range(3):
+        result = measure_loudness(source, ffmpeg, start, end, limiter(gain)).get("input_i", target)
+        if abs(target - result) < 0.3:
+            break
+        gain += target - result
+    over = gain - (PEAK_CEILING_DB - m.get("input_tp", -99.0))
+    return limiter(gain), f"peaks limited by up to {over:.1f} dB to reach {target:g} LUFS"
+
+
 def encode_ogg(source: Path, out: Path, loudness: float | None = None, quality: int = 5,
-               start: float | None = None, end: float | None = None) -> None:
+               start: float | None = None, end: float | None = None) -> str:
     """Any audio file -> Ogg Vorbis at 44100 Hz (channels kept). With `loudness` (LUFS, e.g. -16)
-    the whole track gets one gain so its integrated loudness matches; the true peak stays <= -1.5 dB."""
+    the track is brought to that integrated loudness: one fixed gain, plus a peak limiter only
+    when the peaks would pass -1.5 dB. Returns a note for the user (empty if nothing to say)."""
     ffmpeg = audio.find_ffmpeg()
-    filters = []
+    note = ""
+    command = [ffmpeg, "-y", "-v", "error"] + _cut_args(start, end) + ["-i", str(source)]
     if loudness is not None:
-        m = measure_loudness(source, ffmpeg)
-        if "input_i" not in m:
-            raise MusicError(f"{source} is silent")
-        gain = loudness - m["input_i"]
-        headroom = -1.5 - m.get("input_tp", -99.0)
-        if gain > headroom:
-            gain = headroom  # don't push peaks into clipping; it ends up a little quieter than asked
-        filters.append(f"volume={gain:.2f}dB")
-    command = [ffmpeg, "-y", "-v", "error"]
-    if start is not None:
-        command += ["-ss", f"{start:.3f}"]
-    if end is not None:
-        command += ["-to", f"{end:.3f}"]
-    command += ["-i", str(source)]
-    if filters:
-        command += ["-af", ",".join(filters)]
+        chain, note = loudness_filter(source, loudness, ffmpeg, start, end)
+        command += ["-af", chain]
     out.parent.mkdir(parents=True, exist_ok=True)
     command += ["-ar", "44100", "-c:a", "libvorbis", "-q:a", str(quality), str(out)]
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         raise MusicError(f"ffmpeg couldn't encode {out.name}: {result.stderr.strip()[-500:]}")
+    return note
 
 
 # --- describing -------------------------------------------------------------------------------

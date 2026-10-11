@@ -93,6 +93,20 @@ class EncodeTests(unittest.TestCase):
         music.encode_ogg(src, out, start=0.5, end=2.0)
         self.assertAlmostEqual(len(audio.read(out)) / audio.RATE, 1.5, delta=0.05)
 
+    def test_loud_peaks_get_limited_to_reach_the_target(self) -> None:
+        # Quiet tone with a loud click every 0.5 s: one gain alone would clip before -16 LUFS.
+        samples = loop_tone(4.0, amp=0.05)
+        for i in range(0, len(samples), audio.RATE // 2):
+            samples[i] = 0.9
+        src = self.root / "spiky.wav"
+        audio.write_wav(src, samples)
+        out = self.root / "spiky.ogg"
+        note = music.encode_ogg(src, out, loudness=-16.0)
+        self.assertIn("peaks limited", note)
+        result = music.measure_loudness(out)
+        self.assertAlmostEqual(result["input_i"], -16.0, delta=0.6)
+        self.assertLess(result["input_tp"], 0.0)
+
     def test_ogg_sample_count_is_exact(self) -> None:
         for n in (8800, 44100):  # whole cycles of the 441 Hz tone (100 samples each)
             src = self.root / f"t{n}.wav"

@@ -249,8 +249,9 @@ def music_assets(manifest: Manifest, ids: list[str]) -> list[Asset]:
 
 
 def render_music(manifest: Manifest, assets: list[Asset], godot: str, loudness: float | None,
-                 keep_wav: Path | None = None) -> list[tuple[Asset, list[str]]]:
-    """Renders the game's scores with its Godot script, then encodes each to the asset's OGG."""
+                 keep_wav: Path | None = None) -> list[tuple[Asset, list[str], str]]:
+    """Renders the game's scores with its Godot script, then encodes each to the asset's OGG.
+    Returns (asset, check problems, loudness note) per track."""
     script = manifest.music.get("render_script")
     if not script:
         raise music.MusicError("set music.render_script in assets.yaml (the game's Godot script that writes WAVs)")
@@ -268,6 +269,6 @@ def render_music(manifest: Manifest, assets: list[Asset], godot: str, loudness: 
         results = []
         for a in assets:
             wav = wavs[manifest.track_name(a)]
-            music.encode_ogg(wav, manifest.asset_path(a), loudness)
-            results.append((a, check_ogg(manifest, a, loop_source=wav)))
+            note = music.encode_ogg(wav, manifest.asset_path(a), loudness)
+            results.append((a, check_ogg(manifest, a, loop_source=wav), note))
     return results

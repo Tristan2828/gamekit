@@ -17,7 +17,8 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" check [ids]
 ```
 
 Music comes out as Ogg Vorbis, 44100 Hz (stereo kept), quality 5. It is never trimmed or faded
-(that would break the loop). Loudness is changed with one fixed gain for the whole track, so the
+(that would break the loop). Loudness is changed with one fixed gain for the whole track, plus a
+gentle peak limiter when the loudest hits would otherwise clip (the output says by how much), so the
 loop stays seamless; -16 LUFS is a common level for game music. Music loops unless the asset
 says `loop: false`.
 
