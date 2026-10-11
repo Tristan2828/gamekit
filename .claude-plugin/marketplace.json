@@ -1,0 +1,12 @@
+{
+  "name": "gamekit",
+  "description": "Game asset pipeline tools for Claude Code.",
+  "owner": { "name": "Tristan2828" },
+  "plugins": [
+    {
+      "name": "gamekit",
+      "source": "./plugins/gamekit",
+      "description": "Plan, make and track a game's art and audio assets."
+    }
+  ]
+}

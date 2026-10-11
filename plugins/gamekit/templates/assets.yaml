@@ -1,0 +1,32 @@
+# Asset manifest: one entry per asset the game needs. Check it with `gamekit validate`.
+#
+# Fields per asset:
+#   id        lowercase snake_case, unique
+#   kind      sprite | tileset | icon | ui | font | sfx | music
+#   source    claude | self | pack | library | sfxr | synth | commission
+#   status    todo | draft | done
+#   file      path inside `output` (.png for images, .wav for sfx, .ogg for music)
+#   size      [width, height] in pixels (images only; one frame for sprites)
+#   frames    animation name -> frame count, e.g. {idle: 4, walk: 6} (sprites only)
+#   replaces  optional: what this replaces in the game today (sprite / sound name)
+#   license   {name, author, url}: required for pack / library / commission once not todo
+#   notes     anything else (style hints, where it's used)
+game: My Game
+output: assets          # folder for finished files, next to this manifest
+palette: palette.hex    # every image is checked against these colors
+
+assets:
+  - id: hero
+    kind: sprite
+    source: claude
+    status: todo
+    file: sprites/hero.png
+    size: [16, 16]
+    frames: {idle: 2, walk: 4}
+    notes: Example entry. Replace with your game's assets.
+
+  - id: hit
+    kind: sfx
+    source: sfxr
+    status: todo
+    file: sfx/hit.wav

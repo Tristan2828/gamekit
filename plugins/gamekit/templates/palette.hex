@@ -1,0 +1,19 @@
+; Starter dark fantasy palette, 16 colors. One RRGGBB per line.
+; Replace it with your game's palette (Lospec.com "HEX file" downloads work as-is,
+; and so do Aseprite .gpl files: point `palette:` in assets.yaml at either).
+0d0b12
+1f1a2b
+3a2f4a
+5e4b6b
+8f7a99
+c9bcd1
+2b1d14
+5a3a22
+9a6a3a
+d9a066
+4a0f12
+8f1d21
+d94a38
+2e3b2a
+5b7a3d
+e8d9a8

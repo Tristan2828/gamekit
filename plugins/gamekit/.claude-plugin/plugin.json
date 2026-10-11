@@ -1,0 +1,9 @@
+{
+  "name": "gamekit",
+  "displayName": "Gamekit",
+  "version": "0.1.0",
+  "description": "Plan, make and track a game's art and audio assets: an asset manifest, palette checks, credits, and (coming) Aseprite export, pack import, procedural SFX and music rendering.",
+  "author": { "name": "Tristan2828" },
+  "repository": "https://github.com/Tristan2828/gamekit",
+  "keywords": ["gamedev", "pixel-art", "assets", "aseprite", "sfx", "godot"]
+}
