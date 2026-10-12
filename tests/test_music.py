@@ -62,8 +62,9 @@ class ManifestMusicTests(unittest.TestCase):
 
     def test_render_command(self) -> None:
         command = music.render_command("godot", Path("/g"), "tools/r.gd", Path("/out"), ["crypt", "boss"])
-        self.assertEqual(command[:6], ["godot", "--headless", "--path", "/g", "-s", "tools/r.gd"])
-        self.assertEqual(command[-3:], ["--out=/out", "--track=crypt", "--track=boss"])
+        # str(Path) uses the OS separator ("\g" on Windows), so build the expected paths the same way.
+        self.assertEqual(command[:6], ["godot", "--headless", "--path", str(Path("/g")), "-s", "tools/r.gd"])
+        self.assertEqual(command[-3:], [f"--out={Path('/out')}", "--track=crypt", "--track=boss"])
 
 
 @unittest.skipUnless(HAS_FFMPEG, "ffmpeg not installed")
