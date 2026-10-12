@@ -84,7 +84,7 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 3 | Pack import: unzip, record license, crop / slice / resize / recolor into assets | ✅ done |
 | 4 | Sound effects: sfxr generator with presets and variants, clean-up of any sound file to WAV, sound checks | ✅ done |
 | 5 | Music: render the game's scores with Godot headless or convert music files, looping OGG, loudness, loop checks | ✅ done |
-| 6 | First real use in GameTest: game loads files; heroes, card icons, 9 music tracks, 22 sound effects | ✅ done |
+| 6 | First real use in GameTest: game loads files; heroes, card icons, 9 music tracks, 7 sound effects (picked by ear from 2 rounds of candidates) | ✅ done |
 
 ## Develop
 

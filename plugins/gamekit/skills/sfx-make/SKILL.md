@@ -78,6 +78,24 @@ Delete `sounds/variants/` once they've chosen.
    first (ffmpeg `acompressor`) and clean again.
 3. `check`, then tell the user to listen.
 
+## Let the user choose by ear
+
+Replacing many sounds at once? Don't install them and ask "how do they sound?". Build a listening
+set instead and let the user pick:
+
+1. For each sound, make 2-3 candidates (different files or layers) into a scratch folder, each
+   loudness-matched to the current sound (`--match`), so the user compares character, not volume.
+2. Copy the game's current sound next to them as `_old` (export the synth version if the game makes
+   it in code). Name files `NN_<id>_old.wav`, `NN_<id>_A.wav`, `NN_<id>_B.wav`... so the user can
+   answer by number and letter ("3 old, 4 B, 7 neither").
+3. Zip the folder and send it to the user (it's a scratch file, not part of the game).
+4. Apply the answers: install only the picks; for "old" set the asset back to its code source
+   with `status: todo` and a note that the owner keeps it (so later sessions don't retry it); for
+   "neither", make a new round from different sources. Expect the old sound to win often: it was
+   tuned to the game.
+
+Don't reuse a rejected file in the next round unless the mix is clearly different, and say so.
+
 ## Finish
 
 Set the asset's `status: draft` in `assets.yaml` (keep the file's comments and layout); `done`
