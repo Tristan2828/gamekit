@@ -42,6 +42,16 @@ class AudioTests(unittest.TestCase):
         self.assertAlmostEqual(max(abs(s) for s in out), audio.db_to_gain(-1.0), places=2)
         self.assertEqual(out[-1], 0.0)
 
+    def test_clean_matches_reference_loudness_and_cuts(self) -> None:
+        reference = tone(0.2, amp=0.05)
+        loud = tone(1.0, amp=0.8)
+        out = audio.clean(loud, peak_db=-3.0, match=reference, max_seconds=0.5)
+        self.assertLessEqual(len(out), int(0.5 * audio.RATE))
+        self.assertAlmostEqual(audio.rms(out[:2000]), audio.rms(reference), delta=0.005)
+        # A quiet sound matched to a loud reference stops at the peak ceiling.
+        out = audio.clean(tone(0.2, amp=0.01), peak_db=-3.0, match=tone(0.2, amp=0.9))
+        self.assertAlmostEqual(max(abs(s) for s in out), audio.db_to_gain(-3.0), places=2)
+
     def test_silence_is_an_error(self) -> None:
         with self.assertRaisesRegex(audio.AudioError, "silent"):
             audio.clean([0.0] * 100)

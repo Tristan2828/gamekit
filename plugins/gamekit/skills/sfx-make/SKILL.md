@@ -13,7 +13,7 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" sfx new <id> --preset <name> [
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" sfx make [ids]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" sfx variants <id> [--count 5] [--preset <name>] [--amount 0.05]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" sfx new <id> --from sounds/variants/<id>_<n>.yaml --force
-python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" sfx clean <file> <id> [--no-trim] [--peak -1] [--force]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" sfx clean <file> <id> [--no-trim] [--peak -1] [--match <old.wav>] [--max-seconds S] [--force]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" sfx info <id-or-file>...
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" check [ids]
 ```
@@ -71,7 +71,11 @@ Delete `sounds/variants/` once they've chosen.
 1. Only use sounds whose license the user has checked (Freesound: filter by CC0; Kenney, Sonniss
    GDC bundles: royalty-free). Never guess a license; record it on the asset
    (`license: {name, author, url}`) or import the download as a pack.
-2. `sfx clean <file> <id>`. Use `--no-trim` for sounds with a deliberate quiet start.
+2. `sfx clean <file> <id>`. Use `--no-trim` for sounds with a deliberate quiet start, `--max-seconds` to cut a
+   long sample (it fades out). **Replacing a sound a game already has?** Export the old one to WAV and pass
+   `--match old.wav`: the new file gets the same loudness, so the game's mix doesn't change (the peak level
+   is then only a ceiling). Very spiky sounds may stop at the ceiling, quieter than the old one; compress them
+   first (ffmpeg `acompressor`) and clean again.
 3. `check`, then tell the user to listen.
 
 ## Finish

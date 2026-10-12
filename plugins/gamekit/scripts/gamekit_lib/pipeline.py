@@ -209,13 +209,16 @@ def make_sfx(manifest: Manifest, asset: Asset, peak_db: float | None = None) -> 
 
 
 def clean_into(manifest: Manifest, asset: Asset, source, do_trim: bool = True,
-               peak_db: float | None = None) -> list[str]:
-    """Any sound file -> the asset's cleaned WAV; returns check problems."""
+               peak_db: float | None = None, match=None, max_seconds: float | None = None) -> list[str]:
+    """Any sound file -> the asset's cleaned WAV; returns check problems. `match`: a sound file
+    whose loudness to copy (e.g. the sound being replaced), with the peak level as a ceiling."""
     out = manifest.asset_path(asset)
     if out.suffix.lower() != ".wav":
         raise audio.AudioError(f"{asset.id}: clean writes .wav files, but file is {asset.file}")
     peak = manifest.sfx_peak_db if peak_db is None else peak_db
-    audio.write_wav(out, audio.clean(audio.read(source), do_trim=do_trim, peak_db=peak))
+    reference = audio.read(Path(match)) if match else None
+    audio.write_wav(out, audio.clean(audio.read(source), do_trim=do_trim, peak_db=peak,
+                                     match=reference, max_seconds=max_seconds))
     return check_wav(manifest, asset)
 
 

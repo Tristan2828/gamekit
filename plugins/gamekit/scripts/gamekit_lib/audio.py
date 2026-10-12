@@ -91,7 +91,7 @@ def _read_pcm_wav(path: Path) -> list[float]:
 
 def _read_ffmpeg(path: Path) -> list[float]:
     command = [find_ffmpeg(), "-v", "error", "-i", str(path), "-f", "f32le", "-ac", "1", "-ar", str(RATE), "-"]
-    result = subprocess.run(command, capture_output=True)
+    result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True)
     if result.returncode != 0:
         raise AudioError(f"ffmpeg couldn't read {path}: {result.stderr.decode(errors='replace').strip()}")
     data = array.array("f")
@@ -155,11 +155,34 @@ def fade_out(samples: list[float], ms: float = 8.0) -> list[float]:
     return out
 
 
-def clean(samples: list[float], do_trim: bool = True, peak_db: float = -1.0) -> list[float]:
+def rms(samples: list[float]) -> float:
+    return math.sqrt(sum(s * s for s in samples) / len(samples)) if samples else 0.0
+
+
+def match_rms(samples: list[float], target_rms: float, peak_db: float) -> list[float]:
+    """Scales to the same loudness (RMS) as a reference sound, without letting the peak pass peak_db."""
+    level, peak = rms(samples), max((abs(s) for s in samples), default=0.0)
+    if level == 0.0 or peak == 0.0:
+        return samples
+    gain = min(target_rms / level, db_to_gain(peak_db) / peak)
+    return [s * gain for s in samples]
+
+
+def clean(samples: list[float], do_trim: bool = True, peak_db: float = -1.0,
+          match: list[float] | None = None, max_seconds: float | None = None) -> list[float]:
+    """Trim, optionally cut to `max_seconds`, then either normalize the peak to `peak_db` or, with
+    `match` (a reference sound), match its loudness with `peak_db` as a ceiling; then a short fade-out."""
     if do_trim:
         samples = trim(samples)
     if not samples or max(abs(s) for s in samples) == 0.0:
         raise AudioError("the sound is silent")
+    if max_seconds is not None and len(samples) > int(max_seconds * RATE):
+        samples = fade_out(samples[: int(max_seconds * RATE)], ms=min(40.0, max_seconds * 250))
+    if match is not None:
+        reference = trim(match)
+        if not reference:
+            raise AudioError("the reference sound is silent")
+        return fade_out(match_rms(samples, rms(reference), peak_db))
     return fade_out(normalize(samples, peak_db))
 
 

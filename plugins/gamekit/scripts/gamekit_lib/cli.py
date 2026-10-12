@@ -93,6 +93,9 @@ def main(argv: list[str] | None = None) -> int:
     sfx_clean.add_argument("asset", help="asset id in the manifest")
     sfx_clean.add_argument("--no-trim", action="store_true", help="keep silence at the start and end")
     sfx_clean.add_argument("--peak", type=float, help="peak level in dBFS (default: audio.sfx_peak_db, else -1)")
+    sfx_clean.add_argument("--match", help="match the loudness of this sound file (e.g. the one being "
+                           "replaced); the peak level becomes a ceiling")
+    sfx_clean.add_argument("--max-seconds", type=float, help="cut to at most this long, with a short fade")
     sfx_clean.add_argument("--force", action="store_true", help="overwrite an existing asset file")
     sfx_info = sfx_commands.add_parser("info", help="describe sounds in numbers (length, level, brightness, shape)")
     sfx_info.add_argument("targets", nargs="+", help="asset ids or sound file paths")
@@ -491,7 +494,8 @@ def _sfx_clean(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
     out = loaded.asset_path(asset)
     if out.exists() and not args.force:
         raise audio.AudioError(f"{out} already exists; add --force to replace it")
-    problems = pipeline.clean_into(loaded, asset, Path(args.source), not args.no_trim, args.peak)
+    problems = pipeline.clean_into(loaded, asset, Path(args.source), not args.no_trim, args.peak,
+                                   match=args.match, max_seconds=args.max_seconds)
     print(f"{asset.id}: {args.source} -> {asset.file}")
     _print_info(asset.id, out)
     for problem in problems:
