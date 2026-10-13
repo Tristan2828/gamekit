@@ -29,7 +29,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from PIL import Image
 
-from . import (art, aseprite, audio, codeart, credits, engines, made, manifest, music, packs, palette,
+from . import (art, aseprite, audio, codeart, credits, engines, made, manifest, music, packs, palette, touchup,
                pictures, pipeline, sfxr)
 
 PAGE = Path(__file__).resolve().parent.parent.parent / "ui" / "index.html"
@@ -530,7 +530,7 @@ def do_make_pictures(loaded: manifest.Manifest, body: dict) -> dict:
     width, height = _clamp(body, "width", 1024, 256, 1536), _clamp(body, "height", 1024, 256, 1536)
     steps = _clamp(body, "steps", 4, 1, 12)
     fixed_seed = _number(body, "seed")
-    refs = [str(pictures.path_of(loaded, name)) for name in body.get("refs") or []]
+    refs = [str(pictures.path_of(loaded, pictures.original_of(loaded, name))) for name in body.get("refs") or []]
     request = {"prompt": prompt, "width": width, "height": height, "steps": steps, "tile": bool(body.get("tile")),
                "refs": refs, "for": str(body.get("for") or "")}
 
@@ -566,11 +566,9 @@ def do_make_frames(loaded: manifest.Manifest, body: dict) -> dict:
     """Pictures for an asset's missing frames, each made from one base picture with its own pose words, then cut
     out (if the cut-out engine is set up)."""
     a = find(loaded, str(body.get("id", "")))
-    base = pictures.path_of(loaded, str(body.get("name", "")))
+    # the picture model reads colors, not transparency or 12 px sprites: work from the full-size original
+    base = pictures.path_of(loaded, pictures.original_of(loaded, str(body.get("name", ""))))
     base_meta = pictures.read_meta(base)
-    if base_meta.get("cutout_of"):  # the picture model reads colors, not transparency: work from the original
-        base = pictures.path_of(loaded, base_meta["cutout_of"])
-        base_meta = pictures.read_meta(base)
     poses = {str(k): str(v).strip() for k, v in (body.get("poses") or {}).items() if str(v).strip()}
     targets = pictures.frame_targets(loaded, a)
     if not poses:
@@ -636,6 +634,33 @@ def do_animation_use(loaded: manifest.Manifest, body: dict) -> dict:
                                    snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)))
     manifest.set_fields(loaded.path, a.id, {"source": "ai"} | ({"status": "draft"} if a.status == "todo" else {}))
     return {"problems": problems, "message": f"{a.id}: saved {len(chosen)} frame{'s' if len(chosen) != 1 else ''} (source: ai)"}
+
+
+def do_save_sprite(loaded: manifest.Manifest, body: dict) -> dict:
+    """Make sprite: a picture's game-sized sprite kept in pictures/ as a picture of its own."""
+    a = find(loaded, str(body.get("id", "")))
+    path = pictures.save_sprite(loaded, a, str(body.get("name", "")), bool(body.get("background", True)),
+                                bool(body.get("snap", True)), bool(body.get("outline", True)), str(body.get("frame") or ""))
+    return {"made": [path.name], "message": f"kept {path.name} in pictures/ ({a.id})"}
+
+
+def do_touchup(loaded: manifest.Manifest, body: dict) -> dict:
+    """Touch up with Claude: the sprite as Claude's text rows (art/<id>.yaml), from pictures or its own PNGs."""
+    a = find(loaded, str(body.get("id", "")))
+    try:
+        if body.get("frames"):
+            path, problems = touchup.from_pictures(loaded, a, _chosen_frames(body), bool(body.get("background", True)),
+                                                   bool(body.get("snap", True)), bool(body.get("outline", True)),
+                                                   bool(body.get("force")))
+        else:
+            path, problems = touchup.from_files(loaded, a, bool(body.get("force")))
+    except touchup.TouchUpError as error:
+        if str(error).startswith("REPLACE:"):
+            raise UserError("REPLACE?") from None  # the page asks first: Claude may have drawn it already
+        raise UserError(str(error)) from None
+    rel = path.relative_to(loaded.root).as_posix()
+    return {"problems": problems, "path": rel,
+            "message": f"{a.id} is ready for Claude: {rel} (source: claude). Ask Claude to touch up {a.id}."}
 
 
 def do_cutout_picture(loaded: manifest.Manifest, body: dict) -> dict:
@@ -867,7 +892,8 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
     "/api/pictures/remove": do_remove_picture,
     "/api/pictures/preview": do_preview_picture,
     "/api/pictures/frames": do_make_frames, "/api/pictures/animation": do_animation_preview,
-    "/api/pictures/animation/use": do_animation_use,
+    "/api/pictures/animation/use": do_animation_use, "/api/touchup": do_touchup,
+    "/api/pictures/sprite": do_save_sprite,
     "/api/pictures/cutout": do_cutout_picture, "/api/pictures/use": do_use_picture,
     "/api/status": do_status, "/api/validate": do_validate, "/api/check": do_check, "/api/credits": do_credits,
     "/api/open-folder": do_open_folder, "/api/info": do_info,

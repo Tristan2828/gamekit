@@ -263,6 +263,16 @@ the game shows it, on your floor color; press **Picture** to switch back. **Show
 above the list switches them all. It uses the asset the picture was made for (For asset, Animate), or the one you
 pick under **Use as asset…**. Nothing is saved.
 
+**Make sprite** (under **Use as asset…**) keeps the game-sized sprite as a new tile in your pictures, marked
+"Sprite for shambler" and shown pixel-sharp. Make a few from different pictures and compare them side by side,
+with **In game** too. A sprite tile can be used as the asset as it is, or touched up.
+
+**Touch up with Claude** (under **Use as asset…**, and in the Animate panel for all frames at once) is for small
+sprites, where shrinking loses the face, eyes or outline. It saves the sprite in Claude's pixel-by-pixel text
+format, `art/<id>.yaml`, marks the asset `source: claude`, and saves its files so the game shows the draft
+straight away. Then tell Claude **"touch up the shambler"**: it looks at the draft and the big pictures, and fixes
+the pixels by hand (centering, outline, eyes, silhouette, and the walk frames' movement).
+
 **Cut out** makes a copy of a picture with the background made transparent by a second AI model (BiRefNet),
 shown on a checkerboard and marked "cut-out". It keeps soft edges and the gaps between arms and body, which the
 simple background removal can miss. Cut out before you use a picture as a sprite.

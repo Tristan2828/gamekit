@@ -14,6 +14,7 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture "<description>" [--tak
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines setup cutout       # small (~300 MB, no PyTorch); fine to run
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-cutout <picture.png> [more.png...]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-frames <asset-id> <frame>=<picture.png> [...]   # a whole animation, one crop
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" touchup <asset-id> [--from <frame>=<picture.png> ...] [--force]   # draft -> art/<id>.yaml
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-use <picture.png> <asset-id> [--frame <name>_walk_1] [--keep-background] [--no-palette] [--no-outline] [--force]
 ```
 
@@ -72,8 +73,13 @@ survive. It sets the asset's `source: ai` (and `todo` -> `draft`).
   Sheets (no frame_files): draw with `art-draw`.
 - Run `picture-cutout` before using a picture as a sprite.
 - Expect: 18 px and up usable drafts; 10 to 14 px readable blobs; smaller or very wide (14x8) loses the face.
-  For those, **redraw instead**: look at the picture (Read the PNG) and draw the sprite with the `art-draw`
-  skill (silhouette, outline, a few palette colors), then say it was drawn from the picture.
+  For those, **touch up instead of shrinking alone**: `touchup <id> --from <frame>=<picture> ...` (or the page's
+  **Touch up with Claude**) writes the shrunk draft as Claude's text rows in `art/<id>.yaml` (`source: claude`),
+  then fix it pixel by pixel with the `art-draw` skill ("Touching up an AI draft"). Without `--from` it starts
+  from the asset's current PNG(s).
+- **Make sprite** on the page keeps a picture's game-sized sprite in `pictures/` (`<name>-sprite-<w>x<h>.png`,
+  `.json` with `sprite_of`, `for`, `frame`). A picture already at the asset's size is used as it is (never
+  shrunk again), and `picture-use`, `picture-frames` and `touchup --from` accept it.
 - Look at the result (Read the asset PNG, zoomed) before calling it done, and say honestly what's off.
 - Shrinking works well for textures (`tileset` assets fill the whole tile, no outline) and larger art.
 

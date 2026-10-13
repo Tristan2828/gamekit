@@ -236,6 +236,8 @@ def make_sprite(manifest: Manifest, asset: Asset, name: str, background: bool = 
     if not (isinstance(asset.size, list) and len(asset.size) == 2):
         raise PictureError(f"{asset.id} has no pixel size in the manifest")
     with Image.open(path_of(manifest, name)) as picture:
+        if picture.size == (asset.size[0], asset.size[1]):  # already a sprite (Make sprite): used as it is
+            return picture.convert("RGBA")
         colors = sprite_colors(manifest) if snap else None
         if asset.kind == "tileset":  # a texture fills the whole tile: no background to remove, no outline
             sprite = picture.convert("RGBA").resize((asset.size[0], asset.size[1]), Image.Resampling.BOX)
@@ -286,6 +288,8 @@ def make_frames(manifest: Manifest, asset: Asset, chosen: dict[str, str], backgr
         with Image.open(path_of(manifest, name)) as picture:
             images[frame] = cut_background(picture, background)
     sizes = {image.size for image in images.values()}
+    if sizes == {(asset.size[0], asset.size[1])}:  # sprites already (Make sprite): used as they are
+        return {frame: image.convert("RGBA") for frame, image in images.items()}
     if len(sizes) > 1:
         raise PictureError("the frames' pictures have different sizes: make them all from one picture "
                            "(Work from this, or Make the missing frames)")
@@ -327,3 +331,35 @@ def pose(manifest: Manifest, asset: Asset, frame: str) -> str:
     else:
         what = f"{anim.replace('_', ' ')}, frame {index + 1} of {count}"
     return f"the same creature, same colors, same size and same place in the picture, plain white background: {what}"
+
+
+# --- sprites in the library: a picture's game-sized sprite, kept as its own tile ---------------------
+
+def original_of(manifest: Manifest, name: str) -> str:
+    """The full-size picture a sprite or cut-out came from (itself if it's one)."""
+    seen = set()
+    while name not in seen:
+        seen.add(name)
+        meta = read_meta(path_of(manifest, name))
+        parent = meta.get("sprite_of") or meta.get("cutout_of")
+        if not parent:
+            break
+        name = parent
+    return name
+
+
+def save_sprite(manifest: Manifest, asset: Asset, name: str, background: bool = True, snap: bool = True,
+                outline: bool = True, frame: str = "") -> Path:
+    """Makes a picture's sprite for an asset (as Use would) and keeps it in pictures/ as a new picture,
+    <name>-sprite-<w>x<h>.png, to compare with others, use, or touch up later."""
+    sprite = make_sprite(manifest, asset, name, background, snap, outline)
+    source = path_of(manifest, name)
+    stem = f"{source.stem}-sprite-{sprite.width}x{sprite.height}"
+    path, n = source.with_name(stem + ".png"), 2
+    while path.exists():
+        path, n = source.with_name(f"{stem}-{n}.png"), n + 1
+    sprite.save(path)
+    keep = {k: v for k, v in read_meta(source).items() if k not in ("made", "kept", "width", "height", "frame")}
+    made.record(path, keep | {"sprite_of": name, "for": asset.id, "frame": frame, "width": sprite.width,
+                              "height": sprite.height, "outline": outline, "snap": snap})
+    return path

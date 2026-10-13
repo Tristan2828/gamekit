@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import (art, aseprite, audio, credits, engines, made, manifest, music, packs, palette, pictures, pipeline,
-               sfxr, ui)
+               sfxr, touchup, ui)
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -174,6 +174,15 @@ def main(argv: list[str] | None = None) -> int:
     pic_frames.add_argument("--no-palette", action="store_true", help="don't snap colors to the palette")
     pic_frames.add_argument("--no-outline", action="store_true", help="no outline, even if the manifest's sprites: sets one")
 
+    touch = commands.add_parser("touchup", help="a sprite as Claude's text rows (art/<id>.yaml), to touch up by hand")
+    touch.add_argument("asset", help="asset id")
+    touch.add_argument("--from", dest="pictures", nargs="+", default=[],
+                       help="<frame>=<picture> (or one picture for a still image); default: the asset's own PNGs")
+    touch.add_argument("--keep-background", action="store_true", help="don't remove the background")
+    touch.add_argument("--no-palette", action="store_true", help="don't snap colors to the palette")
+    touch.add_argument("--no-outline", action="store_true", help="no outline, even if the manifest's sprites: sets one")
+    touch.add_argument("--force", action="store_true", help="replace an existing text sprite")
+
     snd = commands.add_parser("sound", help="make sound effects from a description (sound engine) into sound-takes/")
     snd.add_argument("prompt", help="e.g. \"a heavy wooden door slams shut in a stone hall\"")
     snd.add_argument("--seconds", type=float, default=2.0, help="length (default 2)")
@@ -207,13 +216,13 @@ def main(argv: list[str] | None = None) -> int:
                 "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
                 "sfx": _sfx, "music": _music, "ui": _ui, "engines": _engines, "picture": _picture,
                 "picture-cutout": _picture_cutout, "picture-use": _picture_use,
-                "picture-frames": _picture_frames, "sound": _sound, "voice": _voice,
+                "picture-frames": _picture_frames, "touchup": _touchup, "sound": _sound, "voice": _voice,
                 "take-use": _take_use}
     try:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
             packs.PackError, audio.AudioError, music.MusicError, ui.UserError, engines.EngineError,
-            pictures.PictureError) as error:
+            pictures.PictureError, touchup.TouchUpError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -784,6 +793,31 @@ def _picture_frames(args: argparse.Namespace) -> int:
                                    snap=not args.no_palette, outline=not args.no_outline)
     manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
     print(f"{asset.id}: wrote {', '.join(chosen)} (one shared crop; source: ai)")
+    for problem in problems:
+        print(f"  - {problem}")
+    return 0
+
+
+def _touchup(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    asset = _asset(loaded, args.asset)
+    try:
+        if args.pictures:
+            chosen = {}
+            for item in args.pictures:
+                frame, _, name = item.partition("=")
+                chosen[frame if name else asset.id] = name or frame
+            if not loaded.frame_paths(asset):
+                chosen = {asset.id: next(iter(chosen.values()))}
+            path, problems = touchup.from_pictures(loaded, asset, chosen, not args.keep_background,
+                                                   not args.no_palette, not args.no_outline, args.force)
+        else:
+            path, problems = touchup.from_files(loaded, asset, args.force)
+    except touchup.TouchUpError as error:
+        if str(error).startswith("REPLACE:"):
+            raise touchup.TouchUpError(f"{str(error)[8:]} already exists; add --force to replace it") from None
+        raise
+    print(f"{asset.id}: wrote {path.relative_to(loaded.root).as_posix()} (source: claude) and rendered it")
     for problem in problems:
         print(f"  - {problem}")
     return 0

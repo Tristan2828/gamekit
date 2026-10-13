@@ -1,6 +1,6 @@
 ---
 name: art-draw
-description: Draw pixel art sprites, icons, tiles and UI images as text rows (one character per pixel) on the game's palette, render them to PNG sprite sheets, and review them visually. Use when the user asks Claude to draw, redraw, animate or touch up a pixel art asset listed in assets.yaml (source claude).
+description: Draw pixel art sprites, icons, tiles and UI images as text rows (one character per pixel) on the game's palette, render them to PNG sprite sheets, and review them visually. Use when the user asks Claude to draw, redraw, animate or touch up a pixel art asset listed in assets.yaml (source claude), including touching up a draft made from AI pictures ("touch up the shambler").
 ---
 
 # Draw pixel art as text
@@ -43,6 +43,23 @@ keys:          # optional; char -> palette color name, palette index, or RRGGBB
   `RRGGBB name` per line). Prefer palette colors; `check` flags anything off-palette.
 - Every row and every frame of an asset must be the same size, and match the manifest `size`.
   Frame counts per animation must match the manifest `frames`.
+
+## Touching up an AI draft
+
+"Touch up <id>" usually means a draft made from AI pictures: the asset page's **Touch up with Claude** (or
+`gamekit.py touchup <id> [--from <frame>=<picture> ...]`) wrote `art/<id>.yaml` from shrunk pictures, set
+`source: claude` and rendered it. Its first line says which pictures it came from.
+
+1. Read the yaml, then look at the rendered frames (Read the PNGs, zoomed with `preview`) and at the full-size
+   pictures named in the first line (`pictures/<name>`): they show what the creature is meant to look like.
+2. Fix what shrinking breaks, keeping the draft's colors and overall shape: center the creature and make it
+   left-right symmetric if the game wants that; a clean 1 px outline (no gaps, no doubled corners); a readable
+   face (eyes as clear 1-2 px marks in their bright color, not touching the outline); remove stray pixels and
+   noise; a strong silhouette.
+3. Animation drafts: frames the pictures didn't cover are copies of the frame before them. Make each one move
+   (walk: legs alternate, body bobs 1 px; attack: lean or reach), changing as few pixels as possible and keeping
+   the outline and feet steady.
+4. Render with `draw`, look at it again, and say what changed. Keep the first comment line (where it came from).
 
 ## Steps
 
