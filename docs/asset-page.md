@@ -4,22 +4,36 @@ The asset page is gamekit in your browser. It shows every asset your game needs 
 lets you listen to and pick sounds, play your music, look at your sprites, and mark things done.
 It changes the same `assets.yaml` file Claude uses, so you and Claude always see the same list.
 
-## Open it
+## Open it on a game
 
-In PowerShell, from your game's folder (the one with `assets.yaml`):
+The page always works on one game: the one whose folder you start it from. That folder must have an
+`assets.yaml` (a game without one: ask Claude to plan its assets first, or run `gamekit.py init` there).
 
+**First time: make a double-click launcher (once per game)**
+
+1. Open PowerShell.
+2. Go to the game's folder, for example GameTest:
+   ```
+   cd C:\Repos\GameTest
+   ```
+3. Make the launcher:
+   ```
+   python C:\Repos\gamekit\plugins\gamekit\scripts\gamekit.py ui --launcher
+   ```
+   This only writes a file called `Start Gamekit.bat` into the game folder; it doesn't open the page.
+
+**Every time after that:** double-click `Start Gamekit.bat` in the game's folder (in File Explorer).
+
+**Without a launcher:** steps 1 and 2, then
 ```
 python C:\Repos\gamekit\plugins\gamekit\scripts\gamekit.py ui
 ```
 
-A window opens (Brave, Chrome or Edge). **Leave the PowerShell window open** while you use the page;
-press Ctrl+C there (or close it) to quit.
+Either way a black window appears and the page opens in its own window (Brave, Chrome or Edge).
+**Leave the black window open** while you use the page; close it (or press Ctrl+C in it) to quit.
 
-Easier next time: run this once and a `Start Gamekit.bat` appears in the game folder. Double-click it.
-
-```
-python C:\Repos\gamekit\plugins\gamekit\scripts\gamekit.py ui --launcher
-```
+The `.bat` is just a shortcut: commit it with the game, or add it to `.gitignore` if you'd rather not.
+If gamekit's folder ever moves, run step 3 again.
 
 If Claude or you edit `assets.yaml` while the page is open, press **Refresh** (top right).
 **Folder** opens the game folder in File Explorer.
