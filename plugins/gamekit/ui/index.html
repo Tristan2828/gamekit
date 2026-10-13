@@ -734,9 +734,11 @@ async function renderPictures() {
     `also in games you sell). Setting up installs PyTorch for your graphics card into <code>${esc(engine.folder)}</code> (a few GB, several minutes).`;
   $('pictureHint').innerHTML = 'The first picture loads the model (about 30 s); more takes of the same description are quicker. ' +
     'Ask for a <b>plain white background</b> when the picture will become a sprite, then <b>Cut out</b> gives it a clean transparent one.';
-  const forWas = $('pFor').value || store.get('pFor', '');
+  const firstTime = !$('pFor').options.length, forWas = $('pFor').value || store.get('pFor', '');
   $('pFor').innerHTML = option('', '(none)', false) + imageAssets().map(a =>
     option(a.id, `${a.id} (${a.size.join('×')}${a.targets.length > 1 ? ', ' + a.targets.length + ' frames' : ''}, ${a.status})`, a.id === forWas)).join('');
+  const remembered = firstTime && S.assets.find(a => a.id === $('pFor').value);
+  if (remembered) setSize(...shapeOf(remembered.size[0], remembered.size[1]), `Same shape as ${remembered.id} (${remembered.size[0]}×${remembered.size[1]})`);
   $('refBox').style.display = refs.length ? 'block' : 'none';
   $('refList').innerHTML = refs.map(r => `<span>${esc(r)}</span>`).join('');
   const data = await api('/api/pictures', {}, true);
