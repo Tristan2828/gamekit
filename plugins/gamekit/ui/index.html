@@ -272,8 +272,12 @@
         <textarea id="pPrompt" style="margin-top:8px" placeholder="e.g. pixel art sprite of a hooded cultist holding a candle, dark fantasy, full body, plain white background"></textarea>
         <div class="chips" id="styleChips"></div>
         <div class="row"><div><label for="pSize">Size</label><select id="pSize">
-          <option value="1024x1024">Square, 1024</option><option value="768x768">Square, 768 (faster)</option>
-          <option value="1344x768">Wide</option><option value="768x1344">Tall</option></select></div>
+          <optgroup label="Square"><option value="1024x1024">Square, 1024</option><option value="768x768">Square, 768 (faster)</option>
+            <option value="512x512">Square, 512 (fastest)</option><option value="1536x1536">Square, 1536 (slow)</option></optgroup>
+          <optgroup label="Wide"><option value="1152x896">A little wide (4:3)</option><option value="1216x832">Wide (3:2)</option>
+            <option value="1344x768">Wide (16:9)</option><option value="1536x640">Very wide (2.4:1)</option></optgroup>
+          <optgroup label="Tall"><option value="896x1152">A little tall (3:4)</option><option value="832x1216">Tall (2:3)</option>
+            <option value="768x1344">Tall (9:16)</option><option value="640x1536">Very tall (1:2.4)</option></optgroup></select></div>
           <div><label for="pTakes">Takes</label><input type="number" id="pTakes" min="1" max="8" value="2"></div></div>
         <label class="check"><input type="checkbox" id="pTile"> Repeats without a seam (textures)</label>
         <div class="row"><div><label for="pSeed">Seed (optional)</label><input type="number" id="pSeed" placeholder="random"></div><div></div></div>
@@ -689,6 +693,24 @@ function imageAssets() {
 }
 // the asset's own pixel grid in the words ("a 12x12 pixel art sprite, each pixel a clean square block") makes the
 // picture blocky and simple enough to survive shrinking to that size
+// a picture size with the asset's own shape: about a million pixels, sides a multiple of 16, 256 to 1536
+function shapeOf(w, h) {
+  const ratio = Math.min(6, Math.max(1 / 6, w / h)), side = v => Math.max(256, Math.min(1536, Math.round(v / 16) * 16));
+  let pw = Math.sqrt(1024 * 1024 * ratio), ph = pw / ratio;
+  const fit = Math.min(1, 1536 / pw, 1536 / ph);
+  return [side(pw * fit), side(ph * fit)];
+}
+// selects a size, adding it to the list (as "label") when it isn't one of the usual ones
+function setSize(w, h, label) {
+  const value = `${w}x${h}`, box = $('pSize');
+  box.querySelectorAll('option[data-custom]').forEach(o => { if (o.value !== value) o.remove(); });
+  if (![...box.options].some(o => o.value === value)) {
+    const o = new Option(`${label || 'Custom'}: ${w}×${h}`, value);
+    o.dataset.custom = '1';
+    box.insertBefore(o, box.firstChild);
+  }
+  box.value = value;
+}
 function forAssetPrompt(a) {
   const rules = (S.sprites && S.sprites.prompt) || 'chunky, clean dark outline, limited color palette';
   const what = a.notes || a.id.replace(/_/g, ' ');
@@ -701,8 +723,7 @@ $('pFor').onchange = () => {
   store.set('pFor', $('pFor').value);
   if (!a) return;
   $('pPrompt').value = forAssetPrompt(a);
-  const [w, h] = a.size, wide = w / h;
-  $('pSize').value = wide > 1.4 ? '1344x768' : wide < 0.7 ? '768x1344' : '1024x1024';
+  setSize(...shapeOf(a.size[0], a.size[1]), `Same shape as ${a.id} (${a.size[0]}×${a.size[1]})`);
   $('pTile').checked = a.kind === 'tileset';
 };
 
@@ -767,8 +788,7 @@ async function renderPictures() {
   $('picList').querySelectorAll('[data-adjust]').forEach(b => b.onclick = () => {
     const m = byName(b.dataset.adjust).meta;
     $('pPrompt').value = m.prompt || '';
-    const size = `${m.width}x${m.height}`;
-    if ([...$('pSize').options].some(o => o.value === size)) $('pSize').value = size;
+    if (m.width && m.height) setSize(m.width, m.height, 'As before');
     $('pTile').checked = !!m.tile;
     $('pSeed').value = m.seed ?? '';
     refs.splice(0, refs.length, ...(m.refs || []));

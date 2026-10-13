@@ -233,11 +233,12 @@ Pictures from a description (FLUX.2 klein), on your graphics card.
 
 1. **For asset** (optional): pick the sprite the picture is for, e.g. *shambler (12×12, 3 frames)*. It writes
    the description for you, from the asset's size ("a 12x12 pixel art sprite, each pixel a clean square block"),
-   the game's sprite rules and the asset's notes in `assets.yaml`. It also picks a wide or tall size to match,
+   the game's sprite rules and the asset's notes in `assets.yaml`. It also sets **Size** to the asset's own shape
+   ("Same shape as bat (14×8): 1360×768"),
    and names the pictures after the asset (`shambler-31.png`). Change the words as you like.
 2. Or **describe the picture** yourself. Style first, then the subject. The **style buttons** add common endings
    (pixel art sprite, item icon, seamless texture, character sheet, concept art, dark fantasy).
-3. **Size**: 768 is faster. **Takes**: how many versions. **Repeats without a seam** for floor and wall textures.
+3. **Size**: square, wide and tall shapes; smaller is faster (512 the fastest). **Takes**: how many versions. **Repeats without a seam** for floor and wall textures.
    **Seed**: leave empty for new versions.
 4. **Make it**. Click any picture to see it full size.
 
