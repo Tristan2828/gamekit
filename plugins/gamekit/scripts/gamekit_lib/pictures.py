@@ -1,107 +1,56 @@
 """AI pictures for a game: the `pictures/` folder next to assets.yaml, and turning a picture into a sprite.
 
 Each picture is a PNG with a .json beside it holding what made it (description, seed, size...), so a
-take can be remade or adjusted. Removed pictures move to pictures/_removed/ rather than being deleted.
+take can be remade or adjusted. Removed pictures move to pictures/_removed/ (see made.py).
 """
 from __future__ import annotations
 
-import json
-import re
-import shutil
-import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from . import packs, pipeline
+from . import made, packs, pipeline
+from .made import MadeError as PictureError
 from .manifest import Asset, Manifest
 from .palette import Color
 
-FOLDER = "pictures"
 MARK = (255, 0, 254)  # a color pictures don't use, to find the flood-filled background
 
 
-class PictureError(Exception):
-    pass
-
-
 def folder(manifest: Manifest) -> Path:
-    return manifest.root / FOLDER
-
-
-def slug(text: str, limit: int = 40) -> str:
-    words = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return (words[:limit].rstrip("-") or "picture")
+    return made.folder(manifest, "picture")
 
 
 def new_path(manifest: Manifest, prompt: str, seed: int) -> Path:
-    folder(manifest).mkdir(exist_ok=True)
-    base = folder(manifest) / f"{slug(prompt)}-{seed}"
-    path, n = base.with_suffix(".png"), 2
-    while path.exists():
-        path, n = base.parent / f"{base.name}-{n}.png", n + 1
-    return path
+    return made.new_path(manifest, "picture", prompt, seed)
 
 
 def path_of(manifest: Manifest, name: str) -> Path:
-    """A picture by file name (no folders), which must exist."""
-    if not name or "/" in name or "\\" in name or name.startswith(".") or not name.endswith(".png"):
-        raise PictureError(f"not a picture name: {name!r}")
-    path = folder(manifest) / name
-    if not path.is_file():
-        raise PictureError(f"no picture called {name}")
-    return path
+    return made.path_of(manifest, "picture", name)
 
 
-def read_meta(path: Path) -> dict:
-    try:
-        return json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-
-
-def write_meta(path: Path, meta: dict) -> None:
-    path.with_suffix(".json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+read_meta = made.read_meta
+slug = made.slug
 
 
 def record(path: Path, request: dict, answer: dict) -> dict:
     """Writes the settings that made a picture beside it."""
-    meta = {"prompt": request.get("prompt", ""), "seed": answer.get("seed"), "width": answer.get("width"),
-            "height": answer.get("height"), "steps": request.get("steps"), "tile": bool(request.get("tile")),
-            "refs": [Path(r).name for r in request.get("refs", [])], "model": "FLUX.2 klein 4B",
-            "made": time.strftime("%Y-%m-%d %H:%M"), "kept": False}
-    write_meta(path, meta)
-    return meta
+    return made.record(path, {"prompt": request.get("prompt", ""), "seed": answer.get("seed"),
+                              "width": answer.get("width"), "height": answer.get("height"),
+                              "steps": request.get("steps"), "tile": bool(request.get("tile")),
+                              "refs": [Path(r).name for r in request.get("refs", [])], "model": "FLUX.2 klein 4B"})
 
 
 def list_all(manifest: Manifest) -> list[dict]:
-    """Every picture, newest first: {name, meta, mtime}."""
-    where = folder(manifest)
-    items = []
-    for path in where.glob("*.png") if where.is_dir() else []:
-        items.append({"name": path.name, "meta": read_meta(path), "mtime": int(path.stat().st_mtime)})
-    return sorted(items, key=lambda item: -item["mtime"])
+    return made.list_all(manifest, "picture")
 
 
 def keep(manifest: Manifest, name: str, kept: bool = True) -> None:
-    path = path_of(manifest, name)
-    meta = read_meta(path)
-    meta["kept"] = kept
-    write_meta(path, meta)
+    made.keep(manifest, "picture", name, kept)
 
 
 def remove(manifest: Manifest, name: str) -> Path:
-    """Moves a picture (and its .json) into pictures/_removed/."""
-    path = path_of(manifest, name)
-    bin_ = folder(manifest) / "_removed"
-    bin_.mkdir(exist_ok=True)
-    for part in (path, path.with_suffix(".json")):
-        if part.exists():
-            target = bin_ / part.name
-            if target.exists():
-                target.unlink()
-            shutil.move(str(part), target)
-    return bin_ / path.name
+    return made.remove(manifest, "picture", name)
 
 
 # --- picture -> sprite ----------------------------------------------------------------------------

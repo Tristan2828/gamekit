@@ -95,7 +95,7 @@ The **todo / draft / done** buttons under every asset change its status straight
 3. Press **Import**. It becomes a clean game-ready WAV. If the asset already has a file, you're asked first.
 4. Downloaded sounds need their license written down. Tell Claude where it came from; never guess a license.
 
-## Music tab: play, render and import music
+## Music tab: play, make, render and import music
 
 - **Every track** (right) has a player. Looping tracks loop.
 - Pick a track at the top left to see its numbers:
@@ -108,6 +108,25 @@ The **todo / draft / done** buttons under every asset change its status straight
 - **Import a music file**: drop a file, optionally set **Start** and **End** (in seconds) to pick the
   part that loops, and press **Import**. It's converted to OGG at the game's loudness.
   **Keep its own loudness** skips that. Needs ffmpeg (already installed on your PC).
+
+### Make music with AI
+
+Made on your own graphics card with ACE-Step 1.5 (MIT licence: free to use, also in games you sell).
+The first time, press **Set up the music engine** (a few GB, several minutes).
+
+1. **Describe the music**: instruments, mood, place. The mood buttons (dungeon, battle, boss, town...) add
+   common words; **loopable** asks for no intro and no ending.
+2. Set the **Length**, and optionally **Tempo** and **Key** (empty = the model chooses), and how many **Takes**.
+3. **Make it**. Loading takes about 40 s; then about a minute and a half per minute of music.
+4. Listen to the takes under **AI takes** (right). **Keep** stars favourites, **Another take** makes a new
+   version, **Adjust** puts a take's settings back in the form.
+5. **Use for a track…**: pick the game's track it replaces, and **Start** / **End** (seconds) for the loop.
+   It's made into the track's looping OGG at the game's loudness and marked `source: ai`. Then check the
+   track's numbers on the left: AI music often fades out at the end, which shows up as **silence across
+   the loop**. Set **End** before the fade (listen for where) and use it again.
+
+Under **Lyrics, planner, seed**: lyrics make it sing (empty = instrumental); the **planner** plans the song
+first for better structure, but takes about 7 minutes a take on your AMD card and sometimes fails.
 
 ## Art tab: look at your sprites
 

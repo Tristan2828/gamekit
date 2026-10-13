@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import (art, aseprite, audio, codeart, credits, engines, manifest, music, packs, palette, pictures,
-               pipeline, sfxr)
+from . import (art, aseprite, audio, codeart, credits, engines, made, manifest, music, packs, palette,
+               pictures, pipeline, sfxr)
 
 PAGE = Path(__file__).resolve().parent.parent.parent / "ui" / "index.html"
 PLUGIN_JSON = Path(__file__).resolve().parent.parent.parent / ".claude-plugin" / "plugin.json"
@@ -560,7 +560,81 @@ def do_use_picture(loaded: manifest.Manifest, body: dict) -> dict:
     return {"problems": problems, "message": f"{a.id} now uses {body.get('name')} (source: ai)"}
 
 
+# --- AI music takes -----------------------------------------------------------------------------------
+
+def do_music_takes(loaded: manifest.Manifest, body: dict) -> dict:
+    items = [item | {"url": file_url(loaded.root, made.folder(loaded, "music") / item["name"])}
+             for item in made.list_all(loaded, "music")]
+    return {"takes": items, "engine": engines.status(engines.get("music"))}
+
+
+def do_make_music(loaded: manifest.Manifest, body: dict) -> dict:
+    prompt = str(body.get("prompt", "")).strip()
+    if not prompt:
+        raise UserError("describe the music first")
+    if not engines.is_installed(engines.get("music")):
+        raise UserError("the music engine isn't set up yet: press Set up on the Music tab")
+    takes = _clamp(body, "takes", 1, 1, 6)
+    bpm = _number(body, "bpm")
+    lyrics = str(body.get("lyrics", "")).strip()
+    request = {"prompt": prompt, "seconds": _clamp(body, "seconds", 60, 10, 300),
+               "bpm": int(bpm) if bpm and 30 <= bpm <= 300 else None, "key": str(body.get("key", "")).strip(),
+               "lyrics": lyrics, "instrumental": not lyrics, "steps": _clamp(body, "steps", 8, 4, 20),
+               "planner": bool(body.get("planner"))}
+    fixed_seed = _number(body, "seed")
+
+    def work(job: Job) -> dict:
+        done = []
+        for take in range(takes):
+            if job.cancel:
+                break
+            seed = int(fixed_seed) + take if fixed_seed is not None else random.randrange(1, 2**31 - 1)
+            out = made.new_path(loaded, "music", prompt, seed)
+            label = f"take {take + 1} of {takes}: " if takes > 1 else ""
+
+            def on_step(text: str) -> None:
+                job.step = label + text
+
+            answer = engines.worker("music").ask(request | {"out": str(out), "seed": seed}, on_step)
+            made.record(out, request | {"seed": answer.get("seed", seed), "model": "ACE-Step 1.5 turbo"})
+            done.append(out.name)
+        return {"made": done, "message": f"made {len(done)} take{'s' if len(done) != 1 else ''}"}
+
+    start_job("Music", work)
+    return {"message": ""}
+
+
+def do_keep_music(loaded: manifest.Manifest, body: dict) -> dict:
+    made.keep(loaded, "music", str(body.get("name", "")), bool(body.get("kept", True)))
+    return {"message": ""}
+
+
+def do_remove_music(loaded: manifest.Manifest, body: dict) -> dict:
+    made.remove(loaded, "music", str(body.get("name", "")))
+    return {"message": "moved to music-takes/_removed"}
+
+
+def do_use_music(loaded: manifest.Manifest, body: dict) -> dict:
+    """A take becomes a music asset's OGG: cut to the chosen loop, at the game's loudness."""
+    a = find(loaded, str(body.get("id", "")))
+    out = loaded.asset_path(a)
+    if a.kind != "music" or out.suffix.lower() != ".ogg":
+        raise UserError(f"{a.id} isn't a music asset with an .ogg file")
+    _overwrite_guard(out, body)
+    source = made.path_of(loaded, "music", str(body.get("name", "")))
+    lufs = _number(body, "loudness")
+    if lufs is None:
+        lufs = loaded.music_lufs if loaded.music_lufs is not None else -16.0
+    note = music.encode_ogg(source, out, None if body.get("keep_level") else lufs,
+                            start=_number(body, "start"), end=_number(body, "end"))
+    manifest.set_fields(loaded.path, a.id, {"source": "ai"} | ({"status": "draft"} if a.status == "todo" else {}))
+    problems = pipeline.check_ogg(loaded, a)
+    return {"problems": problems, "message": f"{a.id} now uses {body.get('name')} (source: ai). {note}".strip()}
+
+
 POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
+    "/api/musictakes": do_music_takes, "/api/musictakes/make": do_make_music, "/api/musictakes/keep": do_keep_music,
+    "/api/musictakes/remove": do_remove_music, "/api/musictakes/use": do_use_music,
     "/api/job": do_job, "/api/cancel": do_cancel, "/api/engines/setup": do_engine_setup,
     "/api/pictures": do_pictures, "/api/pictures/make": do_make_pictures, "/api/pictures/keep": do_keep_picture,
     "/api/pictures/remove": do_remove_picture, "/api/pictures/use": do_use_picture,
@@ -573,7 +647,7 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
 }
 # these don't wait for a running action (jobs run in the background and only take the job slot)
 READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate", "/api/job", "/api/cancel", "/api/pictures",
-             "/api/engines/setup", "/api/pictures/make"}
+             "/api/engines/setup", "/api/pictures/make", "/api/musictakes", "/api/musictakes/make"}
 
 
 # --- the server ------------------------------------------------------------------------------------

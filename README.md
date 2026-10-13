@@ -65,7 +65,8 @@ The Pictures tab runs an AI model on your own graphics card: no account, no limi
 Python with PyTorch for your card (AMD on Windows via ROCm 7.2.1, NVIDIA via CUDA), kept in
 `%LOCALAPPDATA%\gamekit\engines`; models download on first use (pictures: FLUX.2 klein 4B, Apache 2.0, ~16 GB).
 Set one up from the page or with `gamekit.py engines setup picture` (needs [uv](https://docs.astral.sh/uv/):
-`winget install astral-sh.uv`). The picture worker is adapted from Hearthtone's, with thanks.
+`winget install astral-sh.uv`). Music: ACE-Step 1.5 (MIT, ~10 GB; its code is fetched with git at a pinned
+commit). The picture and music workers are adapted from Hearthtone's, with thanks.
 
 The same tools work without Claude, from the game's folder:
 
@@ -115,8 +116,8 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 6 | First real use in GameTest: game loads files; heroes, card icons, 9 music tracks, 7 sound effects (picked by ear from 2 rounds of candidates) | ✅ done |
 | 7 | Asset page (`gamekit ui`): assets, sounds, music and art tabs in the browser | ✅ done |
 | 8 | Local AI engines: tested on an AMD RX 7800 XT (ROCm on Windows); **Pictures** tab with FLUX.2 klein (~8 s a take) | ✅ done |
-| 9 | Music engine (ACE-Step 1.5) | next |
-| 10 | Sound effects (Stable Audio 3) and voices (Qwen3-TTS) engines | planned |
+| 9 | **Music** engine: ACE-Step 1.5 on AMD (~1.5 s per second of music), AI takes on the Music tab, "use for a track" with loop cut | ✅ done |
+| 10 | Sound effects (Stable Audio 3) and voices (Qwen3-TTS) engines | next |
 | 11 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
 
 ## Develop

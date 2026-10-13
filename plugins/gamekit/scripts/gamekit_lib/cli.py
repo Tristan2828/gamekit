@@ -7,7 +7,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import art, aseprite, audio, credits, engines, manifest, music, packs, palette, pictures, pipeline, sfxr, ui
+from . import (art, aseprite, audio, credits, engines, made, manifest, music, packs, palette, pictures, pipeline,
+               sfxr, ui)
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -116,6 +117,23 @@ def main(argv: list[str] | None = None) -> int:
     music_clean.add_argument("--start", type=float, help="cut: start at this second")
     music_clean.add_argument("--end", type=float, help="cut: end at this second (pick loop points)")
     music_clean.add_argument("--force", action="store_true", help="overwrite an existing asset file")
+    music_make = music_commands.add_parser("make", help="make music from a description (music engine) into music-takes/")
+    music_make.add_argument("prompt", help="what it should sound like, e.g. \"Instrumental tense dungeon music, low strings\"")
+    music_make.add_argument("--seconds", type=int, default=60, help="length (default 60)")
+    music_make.add_argument("--takes", type=int, default=1, help="how many (default 1)")
+    music_make.add_argument("--bpm", type=int, help="tempo (default: the model chooses)")
+    music_make.add_argument("--key", default="", help="e.g. \"D minor\" (default: the model chooses)")
+    music_make.add_argument("--lyrics", default="", help="words to sing (default: instrumental)")
+    music_make.add_argument("--steps", type=int, default=8, help="detail (default 8)")
+    music_make.add_argument("--seed", type=int, help="seed of the first take (default: random)")
+    music_make.add_argument("--planner", action="store_true", help="plan the song first (better structure; much slower on AMD)")
+    music_use = music_commands.add_parser("use", help="make an AI take a music asset's looping OGG (source: ai)")
+    music_use.add_argument("take", help="file name in music-takes/")
+    music_use.add_argument("asset", help="music asset id")
+    music_use.add_argument("--start", type=float, help="loop start in seconds")
+    music_use.add_argument("--end", type=float, help="loop end in seconds")
+    music_use.add_argument("--loudness", type=float, help="target LUFS (default: audio.music_lufs, else -16)")
+    music_use.add_argument("--force", action="store_true", help="replace an existing asset file")
     music_info = music_commands.add_parser("info", help="length, loudness and how cleanly a track loops")
     music_info.add_argument("targets", nargs="+", help="asset ids or music file paths")
 
@@ -555,7 +573,44 @@ def _print_info(name: str, path: Path) -> None:
 
 def _music(args: argparse.Namespace) -> int:
     loaded = manifest.load(args.manifest)
-    return {"render": _music_render, "clean": _music_clean, "info": _music_info}[args.music_command](args, loaded)
+    return {"render": _music_render, "clean": _music_clean, "info": _music_info, "make": _music_make,
+            "use": _music_use}[args.music_command](args, loaded)
+
+
+def _music_make(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    request = {"prompt": args.prompt, "seconds": args.seconds, "bpm": args.bpm, "key": args.key,
+               "lyrics": args.lyrics, "instrumental": not args.lyrics.strip(), "steps": args.steps,
+               "planner": args.planner}
+    worker = engines.worker("music")
+    try:
+        for take in range(max(1, args.takes)):
+            seed = args.seed + take if args.seed is not None else random.randrange(1, 2**31 - 1)
+            out = made.new_path(loaded, "music", args.prompt, seed)
+            answer = worker.ask(request | {"out": str(out), "seed": seed}, lambda s: print(f"  {s}", flush=True))
+            made.record(out, request | {"seed": answer.get("seed", seed), "model": "ACE-Step 1.5 turbo"})
+            print(f"wrote {out.relative_to(loaded.root).as_posix()} (seed {answer.get('seed', seed)})", flush=True)
+    finally:
+        worker.stop()
+    return 0
+
+
+def _music_use(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
+    asset = _asset(loaded, args.asset)
+    out = loaded.asset_path(asset)
+    if asset.kind != "music" or out.suffix.lower() != ".ogg":
+        raise music.MusicError(f"{asset.id} isn't a music asset with an .ogg file")
+    if out.exists() and not args.force:
+        raise music.MusicError(f"{out} already exists; add --force to replace it")
+    lufs = args.loudness if args.loudness is not None else (loaded.music_lufs if loaded.music_lufs is not None else -16.0)
+    note = music.encode_ogg(made.path_of(loaded, "music", args.take), out, lufs, start=args.start, end=args.end)
+    manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
+    print(f"{asset.id}: {args.take} -> {asset.file} (source: ai)")
+    if note:
+        print(f"  {note}")
+    _print_music(asset.id, out)
+    for problem in pipeline.check_ogg(loaded, asset):
+        print(f"  - {problem}")
+    return 0
 
 
 def _music_render(args: argparse.Namespace, loaded: manifest.Manifest) -> int:

@@ -13,6 +13,8 @@ needs PyYAML and Pillow from `${CLAUDE_PLUGIN_ROOT}/requirements.txt`, ask befor
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" music render [ids] [--loudness -16] [--keep-wav <folder>]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" music clean <file> <id> [--loudness -16 | --keep-level] [--start s] [--end s] [--force]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" music info <id-or-file>...
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" music make "<description>" [--seconds 60] [--takes 2] [--bpm 70] [--key "D minor"] [--lyrics "..."] [--planner]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" music use <take.wav> <id> [--start s] [--end s] [--force]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" check [ids]
 ```
 
@@ -21,6 +23,21 @@ Music comes out as Ogg Vorbis, 44100 Hz (stereo kept), quality 5. It is never tr
 gentle peak limiter when the loudest hits would otherwise clip (the output says by how much), so the
 loop stays seamless; -16 LUFS is a common level for game music. Music loops unless the asset
 says `loop: false`.
+
+## AI music on the user's PC (`music make`)
+
+The music engine runs ACE-Step 1.5 (MIT) on the PC's graphics card; set it up once with
+`gamekit.py engines setup music` (ask first: several GB) or the Music tab's **Set up** button.
+Takes go to the game's `music-takes/` folder (a `.json` beside each holds the settings); suggest git-ignoring it.
+
+- Describe instruments, mood and place: "Instrumental music for a flooded abbey: slow monastic choir humming,
+  a deep tolling bell, low strings; mournful, misty". Add "steady, loopable, no intro, no ending" for loops.
+- On an RX 7800 XT: loading ~40 s, then ~1.5 s per second of music. `--planner` (better structure) takes
+  ~7 minutes a take on AMD and once failed with an OverflowError there: only when the user asks.
+- You can't listen: read `music info` and the shape, then **ask the user to listen** (the Music tab plays every
+  take). They pick; then `music use <take> <id> --end <s>` makes the looping OGG and sets `source: ai`.
+- AI tracks rarely loop by themselves and often fade out: check `music info`'s loop numbers after `use`, and
+  cut with `--start`/`--end` (re-run with `--force`) at a point the user confirms by ear.
 
 Loudness comes from `audio.music_lufs` in `assets.yaml` unless `--loudness` is given (`music clean` falls back to -16 LUFS; `music render` to the game's own mix).
 

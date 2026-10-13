@@ -168,6 +168,43 @@
       <h2>Track</h2>
       <select id="musicPick"></select>
       <div class="card" id="musicCurrent" style="margin-top:10px"></div>
+      <div id="musicSetup" style="display:none">
+        <h2 class="gap">Make music with AI</h2>
+        <div class="hint" id="musicEngineInfo"></div>
+        <button class="primary" id="setupMusic">Set up the music engine</button>
+      </div>
+      <div id="musicForm" style="display:none">
+        <h2 class="gap">Make music with AI</h2>
+        <textarea id="mPrompt" placeholder="e.g. Instrumental music for a cursed forest at dusk: low strings, a far-off wooden flute, slow and uneasy"></textarea>
+        <div class="chips" id="moodChips"></div>
+        <label for="mSeconds">Length <b id="mSecondsOut"></b></label>
+        <input type="range" id="mSeconds" min="10" max="300" step="5" value="60" style="width:100%;accent-color:var(--accent)">
+        <div class="row3"><div><label for="mBpm">Tempo (BPM)</label><input type="number" id="mBpm" min="30" max="300" placeholder="auto"></div>
+          <div><label for="mKey">Key</label><select id="mKey"><option value="">auto</option>
+<option value="C major">C major</option>
+<option value="G major">G major</option>
+<option value="D major">D major</option>
+<option value="A major">A major</option>
+<option value="E major">E major</option>
+<option value="F major">F major</option>
+<option value="Bb major">Bb major</option>
+<option value="Eb major">Eb major</option>
+<option value="A minor">A minor</option>
+<option value="E minor">E minor</option>
+<option value="B minor">B minor</option>
+<option value="D minor">D minor</option>
+<option value="G minor">G minor</option>
+<option value="C minor">C minor</option>
+<option value="F minor">F minor</option></select></div>
+          <div><label for="mTakes">Takes</label><input type="number" id="mTakes" min="1" max="6" value="2"></div></div>
+        <details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Lyrics, planner, seed</summary>
+          <label for="mLyrics">Lyrics (empty = instrumental)</label><textarea id="mLyrics" style="min-height:70px" placeholder="[verse]&#10;..."></textarea>
+          <label class="check"><input type="checkbox" id="mPlanner"> Use the planner: better song structure, but about 7 minutes a take on an AMD card and less reliable</label>
+          <div class="row"><div><label for="mSeed">Seed</label><input type="number" id="mSeed" placeholder="random"></div><div></div></div>
+        </details>
+        <button class="primary" id="makeMusic">Make it</button>
+        <div class="hint" style="margin-top:8px">Loading takes about 40 s; then about a minute and a half for each minute of music.</div>
+      </div>
       <h2 class="gap">Render the game's own music</h2>
       <div class="hint" id="renderHint"></div>
       <div class="buttons"><button id="renderOne">Render this track</button><button id="renderAll">Render every synth track</button></div>
@@ -218,7 +255,7 @@
   <section>
     <div class="tab assets"><h2 id="assetTitle">Assets</h2><div id="assetList"><div class="empty">Loading…</div></div></div>
     <div class="tab sounds"><h2>Takes <button id="clearTakes" style="float:right;font-size:12px;text-transform:none;letter-spacing:0">Clear takes</button></h2><div id="takeList"></div></div>
-    <div class="tab music"><h2>Every track</h2><div id="musicList"></div></div>
+    <div class="tab music"><h2 id="takeTitle">AI takes</h2><div id="musicTakes"></div><h2 class="gap">Every track</h2><div id="musicList"></div></div>
     <div class="tab art"><h2 id="artTitle">Images</h2><div class="gallery" id="gallery"></div></div>
     <div class="tab pictures"><h2 id="picTitle">Pictures</h2><div class="pics" id="picList"></div></div>
   </section>
@@ -303,7 +340,7 @@ function renderAll() {
   const tab = document.body.dataset.tab;
   if (tab === 'assets') renderAssets();
   if (tab === 'sounds') renderSounds();
-  if (tab === 'music') renderMusic();
+  if (tab === 'music') { renderMusic(); renderMusicTakes(); }
   if (tab === 'art') renderArt();
   if (tab === 'pictures') renderPictures();
 }
@@ -649,6 +686,102 @@ $('makePictures').onclick = () => {
   startJob('/api/pictures/make', { prompt: $('pPrompt').value, width, height, takes: +$('pTakes').value || 1,
     tile: $('pTile').checked, seed: $('pSeed').value, refs });
 };
+
+// ---------- Music tab: AI takes ----------
+const MOODS = {
+  'dungeon': 'tense, dark, low cello drone, slow war drums, eerie choir',
+  'battle': 'intense battle music, driving drums, fast strings, brass stabs',
+  'boss': 'epic boss fight, full orchestra, choir, pounding timpani',
+  'town': 'peaceful medieval town, lute, wooden flute, light hand drum',
+  'sad': 'sad, slow, solo cello and piano, melancholy',
+  'menu': 'calm main menu theme, warm strings, memorable melody',
+  'loopable': 'steady, loopable, no intro, no ending',
+};
+$('moodChips').innerHTML = Object.keys(MOODS).map(k => `<button data-mood="${esc(k)}">${esc(k)}</button>`).join('');
+$('moodChips').querySelectorAll('button').forEach(b => b.onclick = () => {
+  const extra = MOODS[b.dataset.mood], box = $('mPrompt');
+  if (!box.value.includes(extra)) box.value = (box.value.trim() ? box.value.trim().replace(/[,.]?$/, ', ') : 'Instrumental game music, ') + extra;
+  box.focus();
+});
+const clock = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+const showLength = () => { $('mSecondsOut').textContent = clock(+$('mSeconds').value); };
+$('mSeconds').oninput = showLength;
+showLength();
+
+async function renderMusicTakes() {
+  const engine = S.engines && S.engines.music;
+  const ready = engine && engine.installed;
+  $('musicSetup').style.display = ready ? 'none' : 'block';
+  $('musicForm').style.display = ready ? 'block' : 'none';
+  if (engine) $('musicEngineInfo').innerHTML = `Music is made on this PC with ${esc(engine.model)} (${esc(engine.license)} licence: free to use, ` +
+    `also in games you sell). Setting up installs it for your graphics card into <code>${esc(engine.folder)}</code> (a few GB, several minutes).`;
+  const data = await api('/api/musictakes', {}, true);
+  if (!data) return;
+  const tracks = S.assets.filter(a => a.kind === 'music');
+  const trackOptions = tracks.map(a => option(a.id, `${a.id} (${a.status})`, a.id === $('musicPick').value)).join('');
+  $('takeTitle').textContent = `AI takes (${data.takes.length})`;
+  $('musicTakes').innerHTML = data.takes.length ? data.takes.map(t => {
+    const m = t.meta || {};
+    return `<div class="card${m.kept ? ' kept' : ''}">
+      <h3>${m.kept ? '★ ' : ''}${esc(t.name)}</h3>
+      <div class="meta">${clock(m.seconds || 0)}${m.bpm ? ' · ' + m.bpm + ' BPM' : ''}${m.key ? ' · ' + esc(m.key) : ''} · seed ${esc(m.seed)}${m.planner ? ' · planner' : ''}${m.lyrics ? ' · with lyrics' : ''} · ${esc(m.made || '')}</div>
+      <audio controls preload="none" src="${t.url}"></audio>
+      <div class="notes">${esc(m.prompt)}</div>
+      <div class="buttons">
+        <button data-mkeep="${esc(t.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
+        <button data-magain="${esc(t.name)}" title="Same settings, new seed">Another take</button>
+        <button data-madjust="${esc(t.name)}" title="Put its settings back in the form">Adjust</button>
+        <button data-museopen="${esc(t.name)}">Use for a track…</button>
+        <button data-mremove="${esc(t.name)}" title="Moves it to music-takes/_removed">Remove</button>
+      </div>
+      <div class="use" id="muse-${esc(t.name)}">
+        <select>${trackOptions}</select>
+        <div class="row3"><div><label>Start (s)</label><input type="number" class="start" min="0" step="0.01"></div>
+          <div><label>End (s)</label><input type="number" class="end" min="0" step="0.01"></div>
+          <div><label>Loudness</label><input type="number" class="lufs" step="0.5" placeholder="${S.music_lufs ?? -16}"></div></div>
+        <div class="buttons"><button data-muse="${esc(t.name)}">Use</button></div>
+        <div class="hint">Made into the track's looping OGG at the game's loudness. Start and end pick the loop: AI music
+          rarely loops by itself, so listen for a point where the end flows back into the start. The track's numbers on the
+          left then say how cleanly it loops.</div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">No AI takes yet.</div>';
+  const byName = n => data.takes.find(t => t.name === n).meta;
+  const box = $('musicTakes');
+  box.querySelectorAll('[data-mkeep]').forEach(b => b.onclick = async () => {
+    if (await api('/api/musictakes/keep', { name: b.dataset.mkeep, kept: b.dataset.kept !== '1' }, true)) renderMusicTakes(); });
+  box.querySelectorAll('[data-mremove]').forEach(b => b.onclick = async () => {
+    if (await api('/api/musictakes/remove', { name: b.dataset.mremove })) renderMusicTakes(); });
+  box.querySelectorAll('[data-magain]').forEach(b => b.onclick = () => {
+    const m = byName(b.dataset.magain);
+    startJob('/api/musictakes/make', { ...m, takes: 1, seed: null });
+  });
+  box.querySelectorAll('[data-madjust]').forEach(b => b.onclick = () => {
+    const m = byName(b.dataset.madjust);
+    $('mPrompt').value = m.prompt || '';
+    $('mSeconds').value = m.seconds || 60; showLength();
+    $('mBpm').value = m.bpm || '';
+    $('mKey').value = m.key || '';
+    $('mLyrics').value = m.lyrics || '';
+    $('mPlanner').checked = !!m.planner;
+    $('mSeed').value = m.seed ?? '';
+    $('mPrompt').focus();
+  });
+  box.querySelectorAll('[data-museopen]').forEach(b => b.onclick = () =>
+    document.getElementById('muse-' + b.dataset.museopen).classList.toggle('open'));
+  box.querySelectorAll('[data-muse]').forEach(b => b.onclick = async () => {
+    const panel = document.getElementById('muse-' + b.dataset.muse);
+    const id = panel.querySelector('select').value;
+    if (!id) return;
+    const done = await api('/api/musictakes/use', { name: b.dataset.muse, id, start: panel.querySelector('.start').value,
+      end: panel.querySelector('.end').value, loudness: panel.querySelector('.lufs').value });
+    if (done) { $('musicPick').value = id; load(); }
+  });
+}
+$('setupMusic').onclick = () => startJob('/api/engines/setup', { name: 'music' });
+$('makeMusic').onclick = () => startJob('/api/musictakes/make', {
+  prompt: $('mPrompt').value, seconds: +$('mSeconds').value, bpm: $('mBpm').value, key: $('mKey').value,
+  takes: +$('mTakes').value || 1, lyrics: $('mLyrics').value, planner: $('mPlanner').checked, seed: $('mSeed').value });
 
 // ---------- dropping files ----------
 function dropZone(el, key, label) {

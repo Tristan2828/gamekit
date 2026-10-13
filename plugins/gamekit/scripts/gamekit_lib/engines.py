@@ -47,6 +47,9 @@ class Engine:
     model: str                  # what it downloads on first use, for people
     license: str
     model_dirs: list[str] = field(default_factory=list)  # folders under engines/models it fills
+    code: tuple[str, str] | None = None     # (git URL, commit): the model's own code, kept in engines/code/<name>
+    requirements: dict[str, str] = field(default_factory=dict)  # PyTorch kind ("rocm"/"cuda"/"cpu"/"*") -> file in code
+    env: dict[str, str] = field(default_factory=dict)  # extra settings for its worker
 
 
 ENGINES = {
@@ -56,6 +59,14 @@ ENGINES = {
          "huggingface_hub", "safetensors", "sentencepiece", "numpy", "pillow"],
         "FLUX.2 klein 4B by Black Forest Labs, about 16 GB on first use", "Apache 2.0",
         ["FLUX.2-klein-4B"]),
+    "music": Engine(
+        "music", "Music", "music_worker.py", ["soundfile", "loguru", "pytorch_wavelets", "PyWavelets"],
+        "ACE-Step 1.5 turbo (+ optional 1.7B planner), about 10 GB on first use", "MIT",
+        ["acestep"],
+        code=("https://github.com/ace-step/ACE-Step-1.5.git", "ca1e85fe9430179831e6bc6be790c332190a3866"),
+        requirements={"rocm": "requirements-rocm.txt", "*": "requirements.txt"},
+        # from ACE-Step's own ROCm launchers: plain PyTorch planner (no flash-attn), no torch.compile
+        env={"ACESTEP_LM_BACKEND": "pt", "TORCH_COMPILE_BACKEND": "eager", "TOKENIZERS_PARALLELISM": "false"}),
 }
 
 
@@ -91,6 +102,11 @@ def python(engine: Engine) -> Path:
 
 def models_dir() -> Path:
     return home() / "models"
+
+
+def code_dir(engine: Engine) -> Path:
+    """Where an engine's own code (a git checkout) lives, if it has any."""
+    return home() / "code" / engine.name
 
 
 def is_installed(engine: Engine) -> bool:
@@ -177,10 +193,26 @@ def setup(name: str, run: Callable[[list[str]], None] | None = None) -> Iterator
         yield f"Making its Python {PYTHON} environment in {folder}"
         run([uv, "venv", "--python", PYTHON, str(folder)])
     py = str(python(engine))
+    if engine.code:
+        url, commit = engine.code
+        code = code_dir(engine)
+        git = shutil.which("git")
+        if not git:
+            raise EngineError("git not found: install Git (Windows: `winget install Git.Git`) and try again")
+        if not (code / ".git").exists():
+            yield f"Downloading the model's code from {url}"
+            code.parent.mkdir(parents=True, exist_ok=True)
+            run([git, "clone", "--quiet", url, str(code)])
+        yield f"Using its code at {commit[:7]}"
+        run([git, "-C", str(code), "fetch", "--quiet", "origin"])
+        run([git, "-C", str(code), "checkout", "--quiet", "--force", commit])
     yield "Installing PyTorch (a few GB; several minutes the first time)"
     for command in torch_commands(uv, py, kind):
         run(command)
     yield "Installing the model's libraries"
+    requirements = engine.requirements.get(kind) or engine.requirements.get("*")
+    if requirements:
+        run([uv, "pip", "install", "--python", py, "-r", str(code_dir(engine) / requirements)])
     run([uv, "pip", "install", "--python", py, *engine.packages])
     yield "Checking that it works"
     check = subprocess.run([py, "-c", "import torch, json; print(json.dumps([torch.__version__, torch.cuda.is_available()]))"],
@@ -198,9 +230,16 @@ def remove(name: str) -> Path:
     engine = get(name)
     stop_all()
     folder = venv(engine)
-    if folder.exists():
-        shutil.rmtree(folder)
+    for place in (folder, code_dir(engine)):
+        if place.exists():
+            shutil.rmtree(place, onerror=_writable)
     return folder
+
+
+def _writable(function: Callable, path: str, info: object) -> None:
+    """git marks some of its files read-only, which stops Windows deleting them: clear that and retry."""
+    os.chmod(path, 0o700)
+    function(path)
 
 
 def _run(command: list[str]) -> None:
@@ -211,8 +250,9 @@ def _run(command: list[str]) -> None:
 
 # --- running workers -----------------------------------------------------------------------------
 
-def worker_env() -> dict[str, str]:
-    return dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1",
+def worker_env(engine: Engine | None = None) -> dict[str, str]:
+    extra = dict(engine.env, GAMEKIT_ENGINE_CODE=str(code_dir(engine))) if engine else {}
+    return dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1", **extra,
                 GAMEKIT_MODELS=str(models_dir()), HF_HOME=str(home() / "hf"),
                 HF_HUB_DISABLE_SYMLINKS_WARNING="1", HF_HUB_DISABLE_PROGRESS_BARS="1",
                 TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL="1",  # AMD's fast attention: ~4x faster on an RX 7800 XT
@@ -246,9 +286,11 @@ class Worker:
         self._close_log()
         self.log = open(self.log_path, "w", encoding="utf-8")
         on_step(f"Starting the {self.engine.title.lower()} model")
+        work = home() / "work" / self.engine.name  # libraries write caches where they run: not into the plugin
+        work.mkdir(parents=True, exist_ok=True)
         self.proc = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,
-                                     text=True, encoding="utf-8", errors="replace", env=worker_env(),
-                                     cwd=str(WORKERS))
+                                     text=True, encoding="utf-8", errors="replace", env=worker_env(self.engine),
+                                     cwd=str(work))
         hello = self._reply(on_step)
         if not hello.get("ready"):
             self.stop()
