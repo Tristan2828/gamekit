@@ -11,9 +11,16 @@ Request: {"prompt", "out", "seconds", "steps", "seed", "mono", "loop"}
 Reply:   {"ok": true, "seed", "seconds"}
 """
 import json
+import os
 import random
 import sys
 from pathlib import Path
+
+# Already in the Hugging Face cache (downloaded once, or copied in): load it offline. Online, the library checks
+# the gated repo first and is refused without a sign-in on this PC, even though the files are right here.
+CACHED = Path(os.environ.get("HF_HOME", "")) / "hub" / "models--stabilityai--stable-audio-3-small-sfx" / "snapshots"
+if os.environ.get("HF_HOME") and CACHED.is_dir() and any(CACHED.iterdir()):
+    os.environ["HF_HUB_OFFLINE"] = "1"
 
 LOCKED = ("The sound model is locked until you accept its license: open "
           "https://huggingface.co/stabilityai/stable-audio-3-small-sfx, sign in, press Agree, then run "

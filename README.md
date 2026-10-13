@@ -119,7 +119,7 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 7 | Asset page (`gamekit ui`): assets, sounds, music and art tabs in the browser | ✅ done |
 | 8 | Local AI engines: tested on an AMD RX 7800 XT (ROCm on Windows); **Pictures** tab with FLUX.2 klein (~8 s a take) | ✅ done |
 | 9 | **Music** engine: ACE-Step 1.5 on AMD (~1.5 s per second of music), AI takes on the Music tab, "use for a track" with loop cut | ✅ done |
-| 10 | **Voices** tab (Qwen3-TTS, ~2x real time) and AI **sound effects** (Stable Audio 3; gated license, accepted once per person) | ✅ done |
+| 10 | **Voices** tab (Qwen3-TTS, ~2x real time) and AI **sound effects** (Stable Audio 3, ~0.3 s a sound; gated license, accepted once per person) | ✅ done |
 | 11 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
 
 ## Develop
