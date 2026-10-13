@@ -20,7 +20,14 @@
   header .version:empty { display: none; }
   .game { display: flex; gap: 8px; align-items: center; margin-left: auto; color: var(--dim); font-size: 13px; }
   .game b { color: var(--text); font-size: 15px; }
-  nav { display: flex; gap: 6px; flex-basis: 100%; margin-top: 6px; }
+  nav { display: flex; gap: 6px; flex-basis: 100%; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+  nav .group { display: flex; gap: 6px; align-items: center; padding-left: 12px; margin-left: 6px; border-left: 1px solid var(--line); }
+  nav .group > span { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+  nav button .wip { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: #e0b341; color: #1a1406; vertical-align: 1px; }
+  .wip-banner { border: 1px dashed #e0b341; background: rgba(224, 179, 65, .1); color: #e0b341; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-weight: 600; }
+  .wip-panel { position: relative; overflow: hidden; min-height: 360px; }
+  .wip-panel .ghost { opacity: .35; }
+  .wip-panel::after { content: "WORK IN PROGRESS"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transform: rotate(-18deg); font-size: clamp(28px, 6vw, 64px); font-weight: 800; letter-spacing: .08em; color: rgba(224, 179, 65, .28); pointer-events: none; white-space: nowrap; }
   nav button { padding: 7px 22px; border-radius: 20px; color: var(--dim); }
   nav button.on { background: var(--accent); border-color: var(--accent); color: #07140f; font-weight: 600; }
   main { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 20px; padding: 12px 24px 40px; align-items: start; }
@@ -98,7 +105,7 @@
   .tile .buttons button { font-size: 12.5px; padding: 3px 9px; }
   .empty { color: var(--dim); padding: 30px 0; text-align: center; }
   .tab { display: none; }
-  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures, body[data-tab=voices] .tab.voices { display: block; }
+  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures, body[data-tab=voices] .tab.voices, body[data-tab=models] .tab.models { display: block; }
   textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
   .pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
   .pic img.shot { width: 100%; border-radius: 6px; display: block; background: #0b0e0d; cursor: zoom-in; }
@@ -123,7 +130,10 @@
   <h1>gamekit</h1><span class="version" id="version" title="gamekit version"></span><span class="sub">art and audio for your game, on this PC</span>
   <div class="game"><span>Game</span><b id="gameName">…</b><button id="openFolder" title="Open the game's folder">Folder</button><button id="refresh" title="Read assets.yaml again">Refresh</button></div>
   <nav>
-    <button data-tab="assets" class="on">Assets</button><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="art">Art</button><button data-tab="pictures">Pictures</button><button data-tab="voices">Voices</button>
+    <button data-tab="assets" class="on">Assets</button>
+    <div class="group"><span>2D</span><button data-tab="art">Art</button><button data-tab="pictures">Pictures</button></div>
+    <div class="group"><span>3D</span><button data-tab="models" title="Not built yet">Models<span class="wip">WIP</span></button></div>
+    <div class="group"><span>Audio</span><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="voices">Voices</button></div>
   </nav>
 </header>
 <div id="status"><div class="top"><span id="statusText"></span><span><button id="statusStop">Stop</button> <button id="statusClose">Close</button></span></div><div class="bar" id="statusBar"><div></div></div><ul id="statusList"></ul></div>
@@ -268,6 +278,19 @@
         <div class="hint" id="pictureHint" style="margin-top:10px"></div>
       </div>
     </div>
+    <div class="tab models">
+      <div class="wip-banner">🚧 Work in progress: 3D models aren't built yet.</div>
+      <h2>Coming later</h2>
+      <div class="hint">This tab will turn a picture into a 3D model on your graphics card (Hunyuan3D 2, like Hearthtone's
+        Models tab), then texture it and rig it in Blender:</div>
+      <ol class="hint" style="padding-left:18px;line-height:1.7">
+        <li>Make a <b>character sheet</b> on the Pictures tab (front view, plain background)</li>
+        <li><b>Make the model</b> from it (a GLB file in the game's <code>models/</code> folder)</li>
+        <li><b>Texture</b> it from the front, back and side pictures</li>
+        <li><b>Rig</b> it for animation in Blender</li>
+      </ol>
+      <div class="hint">Nothing here works yet. Ask Claude when you're ready to start on 3D.</div>
+    </div>
     <div class="tab voices">
       <div id="voiceSetup" style="display:none">
         <h2>Set up the voice engine</h2>
@@ -300,6 +323,7 @@
     <div class="tab music"><h2 id="takeTitle">AI takes</h2><div id="musicTakes"></div><h2 class="gap">Every track</h2><div id="musicList"></div></div>
     <div class="tab art"><h2 id="artTitle">Images</h2><div class="gallery" id="gallery"></div></div>
     <div class="tab pictures"><h2 id="picTitle">Pictures</h2><div class="pics" id="picList"></div></div>
+    <div class="tab models wip-panel"><h2>Models</h2><div class="ghost"><div class="empty">Your 3D models will show here, each with the pictures it was made from.</div></div></div>
     <div class="tab voices"><h2 id="voiceTitle">Readings</h2><div id="voiceList"></div></div>
   </section>
 </main>

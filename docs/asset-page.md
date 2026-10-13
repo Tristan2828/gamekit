@@ -7,11 +7,12 @@ same `assets.yaml` file Claude uses, so you and Claude always see the same list.
 | Tab | What it's for |
 |---|---|
 | **Assets** | What's left: progress, every asset with a preview or player, status buttons, checks, credits |
-| **Sounds** | Sound effects: AI sounds from a description, the retro sfxr generator, or a downloaded file |
-| **Music** | Music: AI music from a description, your game's own music rendered by Godot, or a downloaded file |
-| **Art** | Your sprites, icons and tiles enlarged, including the ones the game still draws in code |
-| **Pictures** | AI pictures from a description: concept art, references for sprites, icons, textures |
-| **Voices** | AI voice-overs: words read in a voice you describe |
+| 2D: **Art** | Your sprites, icons and tiles enlarged, including the ones the game still draws in code |
+| 2D: **Pictures** | AI pictures from a description: concept art, references for sprites, icons, textures; cut-outs |
+| 3D: **Models** | Work in progress, nothing works yet: will turn pictures into 3D models later |
+| Audio: **Sounds** | Sound effects: AI sounds from a description, the retro sfxr generator, or a downloaded file |
+| Audio: **Music** | Music: AI music from a description, your game's own music rendered by Godot, or a downloaded file |
+| Audio: **Voices** | AI voice-overs: words read in a voice you describe |
 
 The AI parts (pictures, music, AI sounds, voices) run on **your own graphics card**: no account, no limits,
 nothing sent to the internet. See [AI engines](#ai-engines-how-they-work) below.
