@@ -22,6 +22,10 @@ If there's no `assets.yaml`, use the `assets-plan` skill first.
 | `validate` | Checks the manifest, the palette file, and that every `done` asset's file exists |
 | `credits` | Writes `CREDITS.md` from the license info (third-party authors + what was made in-house) |
 
+The user can also see all this in a browser: `gamekit ui` opens the asset page (progress, previews,
+players, status buttons); `gamekit ui --launcher` writes a `Start Gamekit.bat` to double-click.
+It edits `assets.yaml` too, so read the file again before changing it if the page may be open.
+
 ## Updating the manifest
 
 Edit `assets.yaml` directly, then run `validate`.

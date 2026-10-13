@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gamekit</title>
+<link rel="icon" href="data:,">
+<!-- gamekit's asset page. Served by `gamekit ui` (scripts/gamekit_lib/ui.py); every action is a POST to /api/... -->
+<style>
+  :root {
+    --bg: #101413; --panel: #171d1b; --raised: #1f2724; --line: #2f3a36;
+    --text: #e6eee9; --dim: #93a39c; --accent: #4fc39a; --accent-dim: #2b7a5e; --good: #8fca6a; --warn: #e0b04f; --bad: #e0705f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 18px 24px 6px; }
+  h1 { margin: 0; font: 600 26px "Cascadia Mono", Consolas, monospace; color: var(--accent); letter-spacing: .5px; }
+  header .sub { color: var(--dim); font-size: 13px; }
+  .game { display: flex; gap: 8px; align-items: center; margin-left: auto; color: var(--dim); font-size: 13px; }
+  .game b { color: var(--text); font-size: 15px; }
+  nav { display: flex; gap: 6px; flex-basis: 100%; margin-top: 6px; }
+  nav button { padding: 7px 22px; border-radius: 20px; color: var(--dim); }
+  nav button.on { background: var(--accent); border-color: var(--accent); color: #07140f; font-weight: 600; }
+  main { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 20px; padding: 12px 24px 40px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px 40px; } header { padding: 16px 16px 4px; } .game { margin-left: 0; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+  h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
+  h2.gap { margin-top: 24px; }
+  label { display: block; margin: 14px 0 5px; font-size: 13px; color: var(--dim); }
+  select, input[type=text], input[type=number] {
+    width: 100%; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
+  select:focus, input:focus, button:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 0; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; color: var(--text); }
+  .check input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .hint { color: var(--dim); font-size: 12.5px; margin-top: 4px; }
+  button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--line); background: var(--raised); color: var(--text); padding: 6px 12px; }
+  button:hover { border-color: var(--accent-dim); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { width: 100%; margin-top: 16px; padding: 11px; background: var(--accent); border-color: var(--accent); color: #07140f; font-weight: 600; font-size: 15.5px; }
+  button.primary:hover { filter: brightness(1.08); }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chips button { font-size: 12.5px; padding: 3px 10px; border-radius: 20px; color: var(--dim); }
+  .chips button.on { border-color: var(--accent); color: var(--text); background: #1b3329; }
+  #status { display: none; position: sticky; top: 8px; z-index: 5; margin: 8px 24px 0; padding: 10px 14px; border-radius: 8px;
+    background: var(--raised); border: 1px solid var(--accent-dim); box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+  #status.error { border-color: var(--bad); color: var(--bad); }
+  #status .top { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+  #status ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--text); max-height: 30vh; overflow-y: auto; }
+  .bar { height: 6px; background: var(--bg); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .bar div { height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  .bar.busy div { width: 35%; animation: slide 1.2s ease-in-out infinite; }
+  @keyframes slide { from { margin-left: -35%; } to { margin-left: 100%; } }
+  .big { font-size: 34px; font-weight: 600; line-height: 1.1; }
+  .counts { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; font-size: 13.5px; color: var(--dim); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 4px; }
+  th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--dim); font-weight: 600; }
+  .problems { margin: 8px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--raised); }
+  .card.kept { border-color: var(--accent-dim); }
+  .card h3 { margin: 0; font-size: 15.5px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .card .meta { color: var(--dim); font-size: 12.5px; margin: 1px 0 6px; }
+  .card .notes { color: var(--dim); font-size: 13px; margin: 6px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .card .notes.open { display: block; }
+  .card audio { width: 100%; height: 34px; margin-top: 4px; }
+  .assetRow { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: start; }
+  .thumb { width: 72px; height: 72px; border-radius: 6px; background: #3a4541; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .thumb img { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; }
+  .thumb.none { border: 2px dashed var(--line); background: none; color: var(--dim); font-size: 11px; text-align: center; }
+  .pill { display: inline-block; padding: 0 9px; border-radius: 20px; font-size: 12px; border: 1px solid var(--line); color: var(--dim); font-weight: 400; }
+  .pill.todo { color: var(--dim); } .pill.draft { border-color: var(--warn); color: var(--warn); } .pill.done { border-color: var(--good); color: var(--good); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; margin-top: 6px; }
+  .seg button { border: 0; border-radius: 0; padding: 2px 11px; font-size: 12.5px; color: var(--dim); background: transparent; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on.todo { background: #2a302e; color: var(--text); }
+  .seg button.on.draft { background: #3a3220; color: var(--warn); }
+  .seg button.on.done { background: #223522; color: var(--good); }
+  .shape { display: flex; align-items: flex-end; gap: 2px; height: 28px; margin: 6px 0 2px; }
+  .shape div { flex: 1; background: var(--accent-dim); border-radius: 1px 1px 0 0; min-height: 1px; }
+  .numbers { font-size: 12.5px; color: var(--dim); }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 14px; text-align: center; color: var(--dim); cursor: pointer; font-size: 13.5px; margin-top: 6px; }
+  .drop.over, .drop:hover { border-color: var(--accent-dim); }
+  .drop.has { border-style: solid; color: var(--text); }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: 8px; background: var(--raised); padding: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .tile .pic { background: #3a4541; border-radius: 6px; min-height: 110px; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 6px; }
+  .tile .pic img { image-rendering: pixelated; }
+  .tile .pic.none { background: none; border: 2px dashed var(--line); color: var(--dim); font-size: 12px; }
+  .tile b { font-size: 14px; overflow-wrap: anywhere; }
+  .tile .meta { color: var(--dim); font-size: 12px; }
+  .tile .buttons button { font-size: 12.5px; padding: 3px 9px; }
+  .empty { color: var(--dim); padding: 30px 0; text-align: center; }
+  .tab { display: none; }
+  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art { display: block; }
+  .soon { color: var(--dim); font-size: 12.5px; }
+</style>
+</head>
+<body data-tab="assets">
+<header>
+  <h1>gamekit</h1><span class="sub">art and audio for your game, on this PC</span>
+  <div class="game"><span>Game</span><b id="gameName">…</b><button id="openFolder" title="Open the game's folder">Folder</button><button id="refresh" title="Read assets.yaml again">Refresh</button></div>
+  <nav>
+    <button data-tab="assets" class="on">Assets</button><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="art">Art</button>
+  </nav>
+</header>
+<div id="status"><div class="top"><span id="statusText"></span><button id="statusClose">Close</button></div><div class="bar" id="statusBar"><div></div></div><ul id="statusList"></ul></div>
+
+<main>
+  <!-- ===== left column: one panel per tab ===== -->
+  <section>
+    <div class="tab assets">
+      <h2>Progress</h2>
+      <div class="big" id="percent">–</div>
+      <div class="bar"><div id="percentBar"></div></div>
+      <div class="counts" id="statusCounts"></div>
+      <table id="kindTable"></table>
+      <h2 class="gap">Show</h2>
+      <div class="row"><div><label for="fKind">Kind</label><select id="fKind"></select></div><div><label for="fStatus">Status</label><select id="fStatus"></select></div></div>
+      <label for="fText">Search</label><input type="text" id="fText" placeholder="id, notes, file…">
+      <h2 class="gap">Checks</h2>
+      <div class="buttons"><button id="validate">Check the manifest</button><button id="checkFiles">Check the files</button><button id="credits">Write CREDITS.md</button></div>
+      <ul class="problems" id="manifestProblems"></ul>
+    </div>
+
+    <div class="tab sounds">
+      <h2>Sound effect</h2>
+      <select id="sfxPick"></select>
+      <div class="card" id="sfxCurrent" style="margin-top:10px"></div>
+      <h2 class="gap">New takes from a preset</h2>
+      <div class="chips" id="presetChips"></div>
+      <div class="row"><div><label for="takeCount">Takes</label><input type="number" id="takeCount" min="1" max="12" value="4"></div><div></div></div>
+      <button class="primary" id="makeTakes">Make takes</button>
+      <button id="similarTakes" style="width:100%;margin-top:8px">Takes similar to the current sound</button>
+      <div class="hint">Takes are drafts in <code>sounds/variants/</code>. Listen, then <b>Keep</b> the one you like. Its settings become the sound's own.</div>
+      <h2 class="gap">Or import a sound file</h2>
+      <div class="drop" id="sfxDrop">Drop a .wav, .mp3, .ogg or .flac here, or click to choose</div>
+      <label class="check"><input type="checkbox" id="sfxTrim" checked> Trim silence at the start and end</label>
+      <div class="row"><div><label for="sfxMax">Cut to at most (s)</label><input type="number" id="sfxMax" min="0" step="0.1" placeholder="no limit"></div><div></div></div>
+      <label>Match the loudness of (optional, e.g. the sound it replaces)</label>
+      <div class="drop" id="sfxMatchDrop">Drop the old sound here</div>
+      <button class="primary" id="sfxImport">Import</button>
+      <div class="hint">Downloaded sounds need their license recorded in assets.yaml. Ask Claude, or see the sfx-make skill.</div>
+    </div>
+
+    <div class="tab music">
+      <h2>Track</h2>
+      <select id="musicPick"></select>
+      <div class="card" id="musicCurrent" style="margin-top:10px"></div>
+      <h2 class="gap">Render the game's own music</h2>
+      <div class="hint" id="renderHint"></div>
+      <div class="buttons"><button id="renderOne">Render this track</button><button id="renderAll">Render every synth track</button></div>
+      <h2 class="gap">Or import a music file</h2>
+      <div class="drop" id="musicDrop">Drop a .wav, .mp3, .ogg or .flac here, or click to choose</div>
+      <div class="row3"><div><label for="musicStart">Start (s)</label><input type="number" id="musicStart" min="0" step="0.01"></div>
+        <div><label for="musicEnd">End (s)</label><input type="number" id="musicEnd" min="0" step="0.01"></div>
+        <div><label for="musicLufs">Loudness</label><input type="number" id="musicLufs" step="0.5"></div></div>
+      <label class="check"><input type="checkbox" id="musicKeep"> Keep its own loudness</label>
+      <button class="primary" id="musicImport">Import</button>
+      <div class="hint">Start and end pick the loop: the end should flow back into the start. Needs ffmpeg.</div>
+    </div>
+
+    <div class="tab art">
+      <h2>Show</h2>
+      <div class="row"><div><label for="aKind">Kind</label><select id="aKind"></select></div><div><label for="aStatus">Status</label><select id="aStatus"></select></div></div>
+      <label for="aScale">Zoom <span id="aScaleText"></span></label><input type="range" id="aScale" min="1" max="8" value="4" style="width:100%;accent-color:var(--accent)">
+      <label class="check"><input type="checkbox" id="aMade"> Only images that exist</label>
+      <div class="buttons"><button id="checkArt">Check the images</button></div>
+      <div class="hint" style="margin-top:14px">Claude draws <b>claude</b> assets as text in <code>art/&lt;id&gt;.yaml</code>: ask it to draw or change one (the art-draw skill), then press <b>Draw</b> here after editing the text yourself. <b>Export</b> runs Aseprite for <b>self</b> assets.</div>
+    </div>
+  </section>
+
+  <!-- ===== right column ===== -->
+  <section>
+    <div class="tab assets"><h2 id="assetTitle">Assets</h2><div id="assetList"><div class="empty">Loading…</div></div></div>
+    <div class="tab sounds"><h2>Takes <button id="clearTakes" style="float:right;font-size:12px;text-transform:none;letter-spacing:0">Clear takes</button></h2><div id="takeList"></div></div>
+    <div class="tab music"><h2>Every track</h2><div id="musicList"></div></div>
+    <div class="tab art"><h2 id="artTitle">Images</h2><div class="gallery" id="gallery"></div></div>
+  </section>
+</main>
+<input type="file" id="filePick" accept="audio/*,.wav,.mp3,.ogg,.flac" style="display:none">
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const store = { get(k, d) { try { return localStorage.getItem('gamekit.' + k) ?? d; } catch { return d; } },
+                set(k, v) { try { localStorage.setItem('gamekit.' + k, v); } catch {} } };
+let S = null;                       // the last /api/state
+let preset = 'hit';
+const uploads = { sfx: null, sfxMatch: null, music: null };
+
+// ---------- talking to the server ----------
+async function api(path, body = {}, quiet = false) {
+  if (!quiet) showStatus('Working…', true);
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gamekit': '1' }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({ error: 'no answer from gamekit (is its window still open?)' }));
+  if (data.error === 'REPLACE?') {
+    if (!confirm('This asset already has a file. Replace it?')) { hideStatus(); return null; }
+    return api(path, { ...body, force: true }, quiet);
+  }
+  if (!res.ok || data.error) { showStatus(data.error || res.statusText, false, true); return null; }
+  if (!quiet) showResult(data);
+  return data;
+}
+
+async function upload(file) {
+  showStatus('Sending ' + file.name + '…', true);
+  const res = await fetch('/api/upload?name=' + encodeURIComponent(file.name), { method: 'POST', headers: { 'X-Gamekit': '1' }, body: file });
+  const data = await res.json().catch(() => ({}));
+  if (!data.upload) { showStatus(data.error || 'upload failed', false, true); return null; }
+  hideStatus();
+  return data.upload;
+}
+
+async function load() {
+  const res = await fetch('/api/state');
+  const data = await res.json();
+  if (data.error) { showStatus(data.error, false, true); return; }
+  S = data;
+  $('gameName').textContent = S.game;
+  document.title = 'gamekit · ' + S.game;
+  fillFilters();
+  renderAll();
+}
+
+// ---------- status bar ----------
+let statusTimer = null;
+function showStatus(text, busy = false, error = false, list = []) {
+  clearTimeout(statusTimer);
+  $('status').style.display = 'block';
+  $('status').classList.toggle('error', error);
+  $('statusText').textContent = text;
+  $('statusBar').style.display = busy ? 'block' : 'none';
+  $('statusBar').classList.toggle('busy', busy);
+  $('statusList').innerHTML = list.map(p => '<li>' + esc(p) + '</li>').join('');
+}
+function hideStatus() { $('status').style.display = 'none'; }
+function showResult(data) {
+  const problems = data.problems || [];
+  if (problems.length) showStatus((data.message ? data.message + ' · ' : '') + problems.length + ' to look at:', false, false, problems);
+  else if (data.message) { showStatus(data.message); statusTimer = setTimeout(hideStatus, 4000); }
+  else hideStatus();
+}
+$('statusClose').onclick = hideStatus;
+
+// ---------- tabs ----------
+function setTab(tab) {
+  document.body.dataset.tab = tab;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  store.set('tab', tab);
+  if (S) renderAll();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+function renderAll() {
+  const tab = document.body.dataset.tab;
+  if (tab === 'assets') renderAssets();
+  if (tab === 'sounds') renderSounds();
+  if (tab === 'music') renderMusic();
+  if (tab === 'art') renderArt();
+}
+
+// ---------- shared bits ----------
+const option = (value, text, selected) => `<option value="${esc(value)}"${selected ? ' selected' : ''}>${esc(text)}</option>`;
+function fillSelect(el, items, keep) {
+  const was = el.value || keep;
+  el.innerHTML = items.map(([v, t]) => option(v, t, v === was)).join('');
+}
+function fillFilters() {
+  const kinds = [['', 'All kinds'], ...S.kinds.filter(k => S.assets.some(a => a.kind === k)).map(k => [k, k])];
+  const statuses = [['', 'Any status'], ['unfinished', 'Not done'], ...S.statuses.map(s => [s, s])];
+  fillSelect($('fKind'), kinds, store.get('fKind', ''));
+  fillSelect($('fStatus'), statuses, store.get('fStatus', ''));
+  const imageKinds = [['', 'All images'], ...['sprite', 'tileset', 'icon', 'ui', 'font'].filter(k => S.assets.some(a => a.kind === k)).map(k => [k, k])];
+  fillSelect($('aKind'), imageKinds, store.get('aKind', ''));
+  fillSelect($('aStatus'), statuses, store.get('aStatus', ''));
+  const sfx = S.assets.filter(a => a.kind === 'sfx');
+  fillSelect($('sfxPick'), sfx.map(a => [a.id, `${a.id}  (${a.source}, ${a.status})`]), store.get('sfx', ''));
+  const tracks = S.assets.filter(a => a.kind === 'music');
+  fillSelect($('musicPick'), tracks.map(a => [a.id, `${a.id}  (${a.source}, ${a.status})`]), store.get('music', ''));
+}
+const statusMatch = (a, f) => !f || (f === 'unfinished' ? a.status !== 'done' : a.status === f);
+const sizeText = a => Array.isArray(a.size) ? a.size.join('×') : '';
+const framesText = a => Object.entries(a.frames || {}).map(([n, c]) => `${n} ${c}`).join(', ');
+
+function statusButtons(a) {
+  return `<div class="seg">${S.statuses.map(s => `<button class="${s}${a.status === s ? ' on' : ''}" data-status="${s}" data-id="${esc(a.id)}">${s}</button>`).join('')}</div>`;
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-status]');
+  if (b && !b.classList.contains('on')) { if (await api('/api/status', { id: b.dataset.id, status: b.dataset.status }, true)) load(); }
+  const n = e.target.closest('.notes');
+  if (n) n.classList.toggle('open');
+});
+
+function shape(values) {
+  return `<div class="shape">${(values || []).map(v => `<div style="height:${Math.max(3, v * 100)}%"></div>`).join('')}</div>`;
+}
+function soundNumbers(i) {
+  return `<div class="numbers">${i.seconds} s · loudness ${i.rms_db} dB · peak ${i.peak_db} dB · attack ${i.attack_ms} ms · brightness ${i.brightness}/s</div>`;
+}
+
+// ---------- Assets tab ----------
+function renderAssets() {
+  const c = S.counts, total = c.todo + c.draft + c.done;
+  const pct = total ? Math.round(100 * c.done / total) : 0;
+  $('percent').textContent = pct + '% done';
+  $('percentBar').style.width = pct + '%';
+  $('statusCounts').innerHTML = `<span>${total} assets</span><span>${c.done} done</span><span>${c.draft} draft</span><span>${c.todo} todo</span>`;
+  const kinds = {};
+  for (const a of S.assets) { const k = kinds[a.kind] ??= { todo: 0, draft: 0, done: 0 }; if (a.status in k) k[a.status]++; }
+  $('kindTable').innerHTML = '<tr><th>kind</th><th>todo</th><th>draft</th><th>done</th></tr>' +
+    Object.entries(kinds).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.todo}</td><td>${v.draft}</td><td>${v.done}</td></tr>`).join('');
+  $('manifestProblems').innerHTML = S.problems.map(p => '<li>' + esc(p) + '</li>').join('');
+
+  const kind = $('fKind').value, status = $('fStatus').value, text = $('fText').value.trim().toLowerCase();
+  const shown = S.assets.filter(a => (!kind || a.kind === kind) && statusMatch(a, status) &&
+    (!text || [a.id, a.notes, a.file, a.replaces, a.source].join(' ').toLowerCase().includes(text)));
+  $('assetTitle').textContent = `Assets (${shown.length} of ${S.assets.length})`;
+  $('assetList').innerHTML = shown.length ? shown.map(a => {
+    let thumb = `<div class="thumb none">${a.exists ? '' : 'not made'}</div>`;
+    if (a.preview) thumb = `<div class="thumb"><img src="${a.preview}" alt=""></div>`;
+    else if (a.url) thumb = `<div class="thumb none">${a.kind}</div>`;
+    const lic = a.license && a.license.name ? ` · ${esc(a.license.name)} by ${esc(a.license.author || '?')}` : '';
+    return `<div class="card"><div class="assetRow">${thumb}<div>
+      <h3>${esc(a.id)} <span class="pill ${a.status}">${a.status}</span></h3>
+      <div class="meta">${esc(a.kind)} · ${esc(a.source)}${sizeText(a) ? ' · ' + sizeText(a) : ''}${framesText(a) ? ' · ' + esc(framesText(a)) : ''} · ${esc(a.file)}${lic}</div>
+      ${a.url ? `<audio controls preload="none" src="${a.url}"${a.loop ? ' loop' : ''}></audio>` : ''}
+      ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ''}
+      ${statusButtons(a)}</div></div></div>`;
+  }).join('') : '<div class="empty">Nothing matches.</div>';
+}
+for (const id of ['fKind', 'fStatus']) $(id).onchange = () => { store.set(id, $(id).value); renderAssets(); };
+$('fText').oninput = () => renderAssets();
+$('validate').onclick = () => api('/api/validate');
+$('checkFiles').onclick = () => api('/api/check');
+$('credits').onclick = () => api('/api/credits');
+$('openFolder').onclick = () => api('/api/open-folder', {}, true);
+$('refresh').onclick = () => load();
+
+// ---------- Sounds tab ----------
+const sfxAsset = () => S.assets.find(a => a.id === $('sfxPick').value);
+$('presetChips').innerHTML = '';
+function renderPresetChips() {
+  $('presetChips').innerHTML = S.presets.map(p => `<button data-preset="${p}" class="${p === preset ? 'on' : ''}">${p}</button>`).join('');
+  $('presetChips').querySelectorAll('button').forEach(b => b.onclick = () => { preset = b.dataset.preset; renderPresetChips(); });
+}
+async function renderSounds() {
+  renderPresetChips();
+  const a = sfxAsset();
+  if (!a) { $('sfxCurrent').innerHTML = '<div class="empty">No sound effects in the manifest yet.</div>'; $('takeList').innerHTML = ''; return; }
+  store.set('sfx', a.id);
+  const data = await api('/api/sfx/takes', { id: a.id }, true);
+  if (!data) return;
+  const cur = data.current;
+  $('sfxCurrent').innerHTML = `<h3>${esc(a.id)} <span class="pill ${a.status}">${a.status}</span></h3>
+    <div class="meta">${esc(a.source)} · ${esc(a.file)}${a.replaces ? ' · replaces ' + esc(a.replaces) : ''}</div>
+    ${cur ? `<audio controls src="${cur.url}"></audio>${shape(cur.info.shape)}${soundNumbers(cur.info)}` : '<div class="hint">No sound file yet.</div>'}
+    ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ''}
+    ${statusButtons(a)}`;
+  $('similarTakes').disabled = !data.has_params;
+  $('similarTakes').title = data.has_params ? '' : 'Only for sfxr sounds that have settings (sounds/<id>.yaml): start from a preset first';
+  const tweaks = Object.entries(S.tweaks);
+  $('takeList').innerHTML = data.takes.length ? data.takes.slice().reverse().map(t => `<div class="card">
+      <h3>${esc(t.name)} <span class="meta" style="margin:0">${esc(t.note)}</span></h3>
+      <audio controls preload="none" src="${t.url}"></audio>${shape(t.info.shape)}${soundNumbers(t.info)}
+      <div class="chips">${tweaks.map(([w, what]) => `<button data-tweak="${w}" data-take="${esc(t.name)}" title="${esc(what)}">${w}</button>`).join('')}</div>
+      <div class="buttons"><button data-keep="${esc(t.name)}">Keep this one</button><button data-more="${esc(t.name)}">More like this</button></div>
+    </div>`).join('') : '<div class="empty">No takes yet. Pick a preset and press <b>Make takes</b>.</div>';
+  $('takeList').querySelectorAll('[data-keep]').forEach(b => b.onclick = async () => { if (await api('/api/sfx/keep', { id: a.id, take: b.dataset.keep })) load(); });
+  $('takeList').querySelectorAll('[data-more]').forEach(b => b.onclick = async () => { if (await api('/api/sfx/make', { id: a.id, from: b.dataset.more, count: 3 })) renderSounds(); });
+  $('takeList').querySelectorAll('[data-tweak]').forEach(b => b.onclick = async () => {
+    if (await api('/api/sfx/make', { id: a.id, from: b.dataset.take, tweak: b.dataset.tweak })) renderSounds(); });
+}
+$('sfxPick').onchange = () => renderSounds();
+$('makeTakes').onclick = async () => { const a = sfxAsset(); if (a && await api('/api/sfx/make', { id: a.id, preset, count: +$('takeCount').value || 4 })) renderSounds(); };
+$('similarTakes').onclick = async () => { const a = sfxAsset(); if (a && await api('/api/sfx/make', { id: a.id, count: +$('takeCount').value || 4 })) renderSounds(); };
+$('clearTakes').onclick = async () => { const a = sfxAsset(); if (a && confirm('Delete every take of ' + a.id + '?') && await api('/api/sfx/clear', { id: a.id })) renderSounds(); };
+$('sfxImport').onclick = async () => {
+  const a = sfxAsset();
+  if (!a) return;
+  if (!uploads.sfx) { showStatus('Drop a sound file first.', false, true); return; }
+  const done = await api('/api/sfx/import', { id: a.id, upload: uploads.sfx, match: uploads.sfxMatch, trim: $('sfxTrim').checked, max_seconds: $('sfxMax').value });
+  if (done) load();
+};
+
+// ---------- Music tab ----------
+const musicAsset = () => S.assets.find(a => a.id === $('musicPick').value);
+async function renderMusic() {
+  const a = musicAsset();
+  $('renderHint').innerHTML = S.has_render_script ? 'Runs the game\'s Godot script for <b>synth</b> tracks, then makes looping OGGs.' :
+    'Set <code>music.render_script</code> in assets.yaml to render the game\'s own music.';
+  $('renderOne').disabled = !a || a.source !== 'synth' || !S.has_render_script;
+  $('renderAll').disabled = !S.has_render_script;
+  $('musicLufs').placeholder = S.music_lufs ?? -16;
+  const tracks = S.assets.filter(t => t.kind === 'music');
+  $('musicList').innerHTML = tracks.length ? tracks.map(t => `<div class="card${t.id === (a && a.id) ? ' kept' : ''}">
+      <h3>${esc(t.id)} <span class="pill ${t.status}">${t.status}</span>${t.loop ? '' : ' <span class="pill">plays once</span>'}</h3>
+      <div class="meta">${esc(t.source)} · ${esc(t.file)}${t.replaces ? ' · ' + esc(t.replaces) : ''}</div>
+      ${t.url ? `<audio controls preload="none" src="${t.url}"${t.loop ? ' loop' : ''}></audio>` : '<div class="hint">No file yet.</div>'}
+      ${statusButtons(t)}</div>`).join('') : '<div class="empty">No music in the manifest yet.</div>';
+  if (!a) { $('musicCurrent').innerHTML = ''; return; }
+  store.set('music', a.id);
+  $('musicCurrent').innerHTML = `<h3>${esc(a.id)} <span class="pill ${a.status}">${a.status}</span></h3><div class="meta">${esc(a.source)} · ${esc(a.file)}</div>
+    ${a.url ? `<audio controls src="${a.url}"${a.loop ? ' loop' : ''}></audio><div class="numbers" id="musicNumbers">Measuring…</div>` : '<div class="hint">No file yet.</div>'}
+    ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ''}`;
+  if (!a.url) return;
+  const data = await api('/api/info', { id: a.id }, true);
+  const el = $('musicNumbers');
+  if (!data || !el || !data.info) { if (el) el.textContent = ''; return; }
+  const i = data.info;
+  const loop = !a.loop ? '' : !i.exact ? ' · loop: can\'t be measured exactly' :
+    ` · loop jump ${i.seam_jump} (normal ${i.edge_motion}), ${(i.silent_head + i.silent_tail).toFixed(2)} s silence across it`;
+  el.innerHTML = `${i.seconds} s · ${i.lufs ?? '?'} LUFS · true peak ${i.true_peak ?? '?'} dBTP${esc(loop)}` +
+    (data.problems.length ? `<ul class="problems">${data.problems.map(p => '<li>' + esc(p) + '</li>').join('')}</ul>` : '');
+}
+$('musicPick').onchange = () => renderMusic();
+$('renderOne').onclick = async () => { const a = musicAsset(); if (a && await api('/api/music/render', { ids: [a.id] })) load(); };
+$('renderAll').onclick = async () => { if (confirm('Render every synth track with Godot? This can take a few minutes.') && await api('/api/music/render', { ids: [] })) load(); };
+$('musicImport').onclick = async () => {
+  const a = musicAsset();
+  if (!a) return;
+  if (!uploads.music) { showStatus('Drop a music file first.', false, true); return; }
+  const done = await api('/api/music/import', { id: a.id, upload: uploads.music, start: $('musicStart').value, end: $('musicEnd').value,
+    loudness: $('musicLufs').value, keep_level: $('musicKeep').checked });
+  if (done) load();
+};
+
+// ---------- Art tab ----------
+function renderArt() {
+  const scale = +$('aScale').value;
+  $('aScaleText').textContent = scale + '×';
+  const kind = $('aKind').value, status = $('aStatus').value, made = $('aMade').checked;
+  const images = S.assets.filter(a => ['sprite', 'tileset', 'icon', 'ui', 'font'].includes(a.kind) && (!kind || a.kind === kind) &&
+    statusMatch(a, status) && (!made || a.preview));
+  $('artTitle').textContent = `Images (${images.length})`;
+  $('gallery').innerHTML = images.length ? images.map(a => {
+    const w = Array.isArray(a.size) ? a.size[0] * scale : 32, h = Array.isArray(a.size) ? a.size[1] * scale : 32;
+    const pic = a.preview ? `<div class="pic"><img src="${a.preview}" alt="${esc(a.id)}" onload="this.style.width=(this.naturalWidth*${scale})+'px'"></div>`
+      : `<div class="pic none"><div style="width:${w}px;height:${h}px;max-width:100%;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center">${sizeText(a) || 'not made'}</div></div>`;
+    const buttons = [];
+    if (a.source === 'claude' && a.src_exists) buttons.push(`<button data-draw="${esc(a.id)}" title="Render ${esc(a.src)} to PNG">Draw</button>`);
+    if (a.source === 'self' && a.src_exists) buttons.push(`<button data-export="${esc(a.id)}" title="Export ${esc(a.src)} with Aseprite">Export</button>`);
+    if (a.preview) buttons.push(`<button data-check="${esc(a.id)}">Check</button>`);
+    return `<div class="tile">${pic}<b>${esc(a.id)}</b>
+      <div class="meta">${esc(a.kind)} · ${esc(a.source)}${sizeText(a) ? ' · ' + sizeText(a) : ''}${framesText(a) ? '<br>' + esc(framesText(a)) : ''}</div>
+      ${statusButtons(a)}<div class="buttons">${buttons.join('')}</div></div>`;
+  }).join('') : '<div class="empty">Nothing matches.</div>';
+  $('gallery').querySelectorAll('[data-draw]').forEach(b => b.onclick = async () => { if (await api('/api/art/draw', { id: b.dataset.draw })) load(); });
+  $('gallery').querySelectorAll('[data-export]').forEach(b => b.onclick = async () => { if (await api('/api/art/export', { id: b.dataset.export })) load(); });
+  $('gallery').querySelectorAll('[data-check]').forEach(b => b.onclick = () => api('/api/check', { ids: [b.dataset.check] }));
+}
+for (const id of ['aKind', 'aStatus']) $(id).onchange = () => { store.set(id, $(id).value); renderArt(); };
+$('aScale').oninput = () => { store.set('aScale', $('aScale').value); renderArt(); };
+$('aMade').onchange = () => renderArt();
+$('checkArt').onclick = () => {
+  const ids = S.assets.filter(a => a.preview).map(a => a.id);
+  if (ids.length) api('/api/check', { ids }); else showStatus('No images made yet.');
+};
+
+// ---------- dropping files ----------
+function dropZone(el, key, label) {
+  const take = async file => {
+    if (!file) return;
+    const name = await upload(file);
+    if (!name) return;
+    uploads[key] = name;
+    el.classList.add('has');
+    el.textContent = file.name + ' (' + label + ')';
+  };
+  el.onclick = () => { $('filePick').onchange = () => take($('filePick').files[0]); $('filePick').value = ''; $('filePick').click(); };
+  el.ondragover = e => { e.preventDefault(); el.classList.add('over'); };
+  el.ondragleave = () => el.classList.remove('over');
+  el.ondrop = e => { e.preventDefault(); el.classList.remove('over'); take(e.dataTransfer.files[0]); };
+}
+dropZone($('sfxDrop'), 'sfx', 'ready to import');
+dropZone($('sfxMatchDrop'), 'sfxMatch', 'loudness to match');
+dropZone($('musicDrop'), 'music', 'ready to import');
+
+// ---------- start ----------
+$('aScale').value = store.get('aScale', '4');
+setTab(store.get('tab', 'assets'));
+load();
+</script>
+</body>
+</html>

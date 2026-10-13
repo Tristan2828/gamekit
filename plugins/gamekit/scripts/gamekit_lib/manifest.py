@@ -263,6 +263,56 @@ def summary(manifest: Manifest) -> dict[str, dict[str, int]]:
     return table
 
 
+def set_status(path: str | Path, asset_id: str, status: str) -> None:
+    """Changes one asset's status in assets.yaml in place, keeping every comment and the layout.
+    Works for one-line entries (`- {id: hero, status: todo, ...}`) and block entries (`- id: hero`
+    with the fields on the lines below)."""
+    if status not in STATUSES:
+        raise ManifestError(f"status must be one of {', '.join(STATUSES)}")
+    path = Path(path)
+    text = path.read_bytes().decode("utf-8")  # bytes, so the file keeps its own line endings
+    lines = text.splitlines(keepends=True)
+    name = re.escape(asset_id)
+    flow = re.compile(r"^\s*-\s*\{.*\bid:\s*[\"']?" + name + r"[\"']?\s*[,}]")
+    block = re.compile(r"^(\s*)-\s+id:\s*[\"']?" + name + r"[\"']?\s*(#.*)?$")
+    for i, line in enumerate(lines):
+        if flow.match(line):
+            if re.search(r"\bstatus:\s*\w+", line):
+                lines[i] = re.sub(r"\bstatus:\s*\w+", f"status: {status}", line, count=1)
+            else:
+                lines[i] = re.sub(r"(\bid:\s*[\"']?" + name + r"[\"']?)", rf"\1, status: {status}", line, count=1)
+            break
+        found = block.match(line.rstrip("\r\n"))
+        if found:
+            indent = len(found.group(1))
+            end = i + 1
+            while end < len(lines) and (not lines[end].strip() or len(lines[end]) - len(lines[end].lstrip()) > indent):
+                end += 1
+            for j in range(i + 1, end):
+                if re.match(r"^\s+status:", lines[j]):
+                    lines[j] = re.sub(r"(status:\s*)\w+", rf"\g<1>{status}", lines[j], count=1)
+                    break
+            else:
+                newline = "\r\n" if line.endswith("\r\n") else "\n"
+                lines.insert(i + 1, " " * (indent + 2) + f"status: {status}" + newline)
+            break
+    else:
+        raise ManifestError(f"{asset_id!r} is not in {path.name}")
+    changed = "".join(lines)
+    check = {a.id: a.status for a in _parse(changed, path)}
+    if check.get(asset_id) != status:  # never write a file we can't read back the way we meant
+        raise ManifestError(f"couldn't change {asset_id}'s status safely; edit {path.name} by hand")
+    path.write_bytes(changed.encode("utf-8"))
+
+
+def _parse(text: str, path: Path) -> list[Asset]:
+    data = yaml.safe_load(text) or {}
+    raw_assets = data.get("assets") if isinstance(data, dict) else None
+    if not isinstance(raw_assets, list):
+        raise ManifestError(f"{path}: 'assets' must be a list")
+    return [_asset_from_dict(raw) for raw in raw_assets if isinstance(raw, dict)]
+
+
 def effective_license(manifest: Manifest, asset: Asset) -> dict[str, str]:
     """The asset's license; `license: {pack: <name>}` reads it from packs/<name>/pack.yaml."""
     pack_name = asset.license.get("pack")

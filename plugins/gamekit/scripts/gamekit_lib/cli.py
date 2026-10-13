@@ -6,7 +6,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import art, aseprite, audio, credits, manifest, music, packs, palette, pipeline, sfxr
+from . import art, aseprite, audio, credits, manifest, music, packs, palette, pipeline, sfxr, ui
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -118,14 +118,20 @@ def main(argv: list[str] | None = None) -> int:
     music_info = music_commands.add_parser("info", help="length, loudness and how cleanly a track loops")
     music_info.add_argument("targets", nargs="+", help="asset ids or music file paths")
 
+    page = commands.add_parser("ui", help="open the asset page in a browser window (this PC only)")
+    page.add_argument("--port", type=int, default=ui.DEFAULT_PORT, help=f"port (default: {ui.DEFAULT_PORT})")
+    page.add_argument("--no-window", action="store_true", help="don't open a window; just print the address")
+    page.add_argument("--launcher", action="store_true",
+                      help="write 'Start Gamekit.bat' next to the manifest (double-click to open the page) and exit")
+
     args = parser.parse_args(argv)
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
                 "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
-                "sfx": _sfx, "music": _music}
+                "sfx": _sfx, "music": _music, "ui": _ui}
     try:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
-            packs.PackError, audio.AudioError, music.MusicError) as error:
+            packs.PackError, audio.AudioError, music.MusicError, ui.UserError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -580,3 +586,13 @@ def _print_music(name: str, path: Path) -> None:
         return
     print(f"    loop point: jump {info.seam_jump:.3f} (normal movement {info.edge_motion:.3f}), "
           f"silence {info.silent_tail:.2f} s at the end + {info.silent_head:.2f} s at the start")
+
+
+def _ui(args: argparse.Namespace) -> int:
+    path = Path(args.manifest)
+    if args.launcher:
+        bat = ui.write_launcher(path, Path(__file__).resolve().parent.parent / "gamekit.py")
+        print(f"wrote {bat} (double-click it to open the asset page)")
+        return 0
+    ui.serve(path, args.port, window=not args.no_window)
+    return 0

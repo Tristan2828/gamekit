@@ -39,6 +39,25 @@ Optional programs: Aseprite (exporting your own art), ffmpeg (mp3 / ogg / flac s
 | `/gamekit:sfx-make` | Generate retro sound effects (sfxr presets), tweak and audition variants, or clean up downloaded sounds |
 | `/gamekit:music-make` | Render the game's own music through Godot, or convert downloaded / AI music, into looping OGGs with checked loop points |
 
+## The asset page
+
+A Hearthtone-style page in your browser for the same tools: progress and every asset with its
+preview or player, sound takes to audition and tweak ("higher", "punchier"...), music players with
+loudness and loop numbers, render and import buttons, and a pixel art gallery. It reads and edits
+the game's `assets.yaml`, so Claude and the page always agree.
+
+```
+python <gamekit>/plugins/gamekit/scripts/gamekit.py ui            # opens the page (http://127.0.0.1:7862)
+python <gamekit>/plugins/gamekit/scripts/gamekit.py ui --launcher # writes 'Start Gamekit.bat': double-click it next time
+```
+
+It opens as its own window in Brave, Chrome or Edge (the first one found; set `GAMEKIT_BROWSER` to a
+browser's .exe to choose), or as a tab in your default browser.
+It only answers this PC, and needs nothing beyond PyYAML and Pillow. Leave its window open while you
+use the page; close it to quit.
+
+**How to use it, tab by tab: [docs/asset-page.md](docs/asset-page.md).**
+
 The same tools work without Claude, from the game's folder:
 
 ```
@@ -85,6 +104,8 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 4 | Sound effects: sfxr generator with presets and variants, clean-up of any sound file to WAV, sound checks | ✅ done |
 | 5 | Music: render the game's scores with Godot headless or convert music files, looping OGG, loudness, loop checks | ✅ done |
 | 6 | First real use in GameTest: game loads files; heroes, card icons, 9 music tracks, 7 sound effects (picked by ear from 2 rounds of candidates) | ✅ done |
+| 7 | Asset page (`gamekit ui`): assets, sounds, music and art tabs in the browser | ✅ done |
+| 8 | AI generators on the page (music, sounds, pictures, voices), once tested on an AMD graphics card | planned |
 
 ## Develop
 

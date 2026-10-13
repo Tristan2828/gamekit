@@ -240,6 +240,59 @@ def mutate(p: Params, seed: int, amount: float = 0.05) -> Params:
     return out.clamped()
 
 
+TWEAKS = {
+    # word -> what it changes (the same table as the sfx-make skill's "User says / Change")
+    "higher": "base_freq up",
+    "lower": "base_freq down",
+    "shorter": "env_sustain and env_decay down",
+    "longer": "env_sustain and env_decay up",
+    "punchier": "env_punch up, env_attack 0",
+    "softer": "lpf_freq down, saw becomes square",
+    "thinner": "hpf_freq up",
+    "fuller": "hpf_freq down",
+    "falling": "freq_ramp down",
+    "rising": "freq_ramp up",
+    "wobble": "vib_strength and vib_speed up",
+    "steady": "no vibrato",
+}
+
+
+def tweak(p: Params, word: str) -> Params:
+    """One small step in the direction of a TWEAKS word, e.g. tweak(p, "higher")."""
+    out = Params(**asdict(p))
+    if word == "higher":
+        out.base_freq += 0.05
+    elif word == "lower":
+        out.base_freq -= 0.05
+    elif word in ("shorter", "longer"):
+        scale = 0.7 if word == "shorter" else 1.4
+        out.env_sustain = out.env_sustain * scale if out.env_sustain else (0.0 if word == "shorter" else 0.05)
+        out.env_decay = out.env_decay * scale if out.env_decay else (0.0 if word == "shorter" else 0.05)
+    elif word == "punchier":
+        out.env_punch += 0.2
+        out.env_attack = 0.0
+    elif word == "softer":
+        out.lpf_freq *= 0.75
+        if out.wave == "saw":
+            out.wave = "square"
+    elif word == "thinner":
+        out.hpf_freq += 0.1
+    elif word == "fuller":
+        out.hpf_freq = max(0.0, out.hpf_freq - 0.1)
+    elif word == "falling":
+        out.freq_ramp -= 0.15
+    elif word == "rising":
+        out.freq_ramp += 0.15
+    elif word == "wobble":
+        out.vib_strength += 0.2
+        out.vib_speed += 0.2
+    elif word == "steady":
+        out.vib_strength = 0.0
+    else:
+        raise ValueError(f"unknown tweak {word!r}; choose from {', '.join(TWEAKS)}")
+    return out.clamped()
+
+
 # --- files ---------------------------------------------------------------------------------
 
 HEADER = """# sfxr sound parameters (gamekit). Most are 0..1; *_ramp, pha_offset and arp_mod are -1..1.

@@ -39,6 +39,8 @@ Peak level comes from `audio.sfx_peak_db` in `assets.yaml` (default -1 dBFS) unl
 
 Always tell the user which files to listen to (`assets/...wav`) and ask how they sound;
 their ears decide, not the numbers.
+Easier for them: the Sounds tab of `gamekit ui` plays takes in the browser, with Keep and tweak buttons
+(it writes the same `sounds/variants/<id>_<n>` files; a `# made:` line in each says how).
 
 ## sfxr sounds (`source: sfxr`)
 
