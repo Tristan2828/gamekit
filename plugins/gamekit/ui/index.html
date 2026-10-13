@@ -98,7 +98,22 @@
   .tile .buttons button { font-size: 12.5px; padding: 3px 9px; }
   .empty { color: var(--dim); padding: 30px 0; text-align: center; }
   .tab { display: none; }
-  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art { display: block; }
+  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures { display: block; }
+  textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
+  .pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .pic img.shot { width: 100%; border-radius: 6px; display: block; background: #0b0e0d; cursor: zoom-in; }
+  .pic.kept { border-color: var(--accent); }
+  .pic .prompt { color: var(--dim); font-size: 12.5px; margin: 6px 0 2px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .pic .buttons button { font-size: 12.5px; padding: 3px 9px; }
+  .use { margin-top: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; display: none; }
+  .use.open { display: block; }
+  .use select { padding: 5px 8px; font-size: 13px; }
+  .use .check { font-size: 13px; margin-top: 6px; }
+  #bigPic { display: none; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.85); align-items: center; justify-content: center; cursor: zoom-out; }
+  #bigPic img { max-width: 94vw; max-height: 94vh; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .refs span { font-size: 12px; border: 1px solid var(--line); border-radius: 20px; padding: 1px 8px; color: var(--dim); }
+  #statusStop { display: none; }
   .soon { color: var(--dim); font-size: 12.5px; }
 </style>
 </head>
@@ -107,10 +122,10 @@
   <h1>gamekit</h1><span class="version" id="version" title="gamekit version"></span><span class="sub">art and audio for your game, on this PC</span>
   <div class="game"><span>Game</span><b id="gameName">…</b><button id="openFolder" title="Open the game's folder">Folder</button><button id="refresh" title="Read assets.yaml again">Refresh</button></div>
   <nav>
-    <button data-tab="assets" class="on">Assets</button><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="art">Art</button>
+    <button data-tab="assets" class="on">Assets</button><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="art">Art</button><button data-tab="pictures">Pictures</button>
   </nav>
 </header>
-<div id="status"><div class="top"><span id="statusText"></span><button id="statusClose">Close</button></div><div class="bar" id="statusBar"><div></div></div><ul id="statusList"></ul></div>
+<div id="status"><div class="top"><span id="statusText"></span><span><button id="statusStop">Stop</button> <button id="statusClose">Close</button></span></div><div class="bar" id="statusBar"><div></div></div><ul id="statusList"></ul></div>
 
 <main>
   <!-- ===== left column: one panel per tab ===== -->
@@ -176,6 +191,27 @@
       <div class="hint" id="codeHint" style="margin-top:14px"></div>
       <div class="hint" style="margin-top:10px">Claude draws <b>claude</b> assets as text in <code>art/&lt;id&gt;.yaml</code>: ask it to draw or change one (the art-draw skill), then press <b>Draw</b> here after editing the text yourself. <b>Export</b> runs Aseprite for <b>self</b> assets.</div>
     </div>
+    <div class="tab pictures">
+      <div id="engineSetup" style="display:none">
+        <h2>Set up the picture engine</h2>
+        <div class="hint" id="engineInfo"></div>
+        <button class="primary" id="setupPicture">Set up</button>
+      </div>
+      <div id="pictureForm">
+        <h2>Describe the picture</h2>
+        <textarea id="pPrompt" placeholder="e.g. pixel art sprite of a hooded cultist holding a candle, dark fantasy, full body, plain white background"></textarea>
+        <div class="chips" id="styleChips"></div>
+        <div class="row"><div><label for="pSize">Size</label><select id="pSize">
+          <option value="1024x1024">Square, 1024</option><option value="768x768">Square, 768 (faster)</option>
+          <option value="1344x768">Wide</option><option value="768x1344">Tall</option></select></div>
+          <div><label for="pTakes">Takes</label><input type="number" id="pTakes" min="1" max="8" value="2"></div></div>
+        <label class="check"><input type="checkbox" id="pTile"> Repeats without a seam (textures)</label>
+        <div class="row"><div><label for="pSeed">Seed (optional)</label><input type="number" id="pSeed" placeholder="random"></div><div></div></div>
+        <div id="refBox" style="display:none"><label>Working from</label><div class="refs" id="refList"></div><button id="clearRefs" style="margin-top:6px;font-size:12.5px">Clear</button></div>
+        <button class="primary" id="makePictures">Make it</button>
+        <div class="hint" id="pictureHint" style="margin-top:10px"></div>
+      </div>
+    </div>
   </section>
 
   <!-- ===== right column ===== -->
@@ -184,8 +220,10 @@
     <div class="tab sounds"><h2>Takes <button id="clearTakes" style="float:right;font-size:12px;text-transform:none;letter-spacing:0">Clear takes</button></h2><div id="takeList"></div></div>
     <div class="tab music"><h2>Every track</h2><div id="musicList"></div></div>
     <div class="tab art"><h2 id="artTitle">Images</h2><div class="gallery" id="gallery"></div></div>
+    <div class="tab pictures"><h2 id="picTitle">Pictures</h2><div class="pics" id="picList"></div></div>
   </section>
 </main>
+<div id="bigPic"><img alt=""></div>
 <input type="file" id="filePick" accept="audio/*,.wav,.mp3,.ogg,.flac" style="display:none">
 
 <script>
@@ -267,6 +305,7 @@ function renderAll() {
   if (tab === 'sounds') renderSounds();
   if (tab === 'music') renderMusic();
   if (tab === 'art') renderArt();
+  if (tab === 'pictures') renderPictures();
 }
 
 // ---------- shared bits ----------
@@ -471,6 +510,146 @@ $('checkArt').onclick = () => {
   if (ids.length) api('/api/check', { ids }); else showStatus('No images made yet.');
 };
 
+// ---------- background jobs (AI engines) ----------
+let jobTimer = null, lastJob = '';
+function watchJob() {
+  clearTimeout(jobTimer);
+  jobTimer = setTimeout(pollJob, 800);
+}
+async function pollJob() {
+  const data = await api('/api/job', {}, true);
+  const job = data && data.job;
+  if (!job) return;
+  if (job.state === 'running') {
+    showStatus(`${job.label}: ${job.step || 'starting'} (${job.seconds} s)`, true);
+    $('statusStop').style.display = 'inline-block';
+    lastJob = job.id;
+    watchJob();
+    return;
+  }
+  $('statusStop').style.display = 'none';
+  if (lastJob !== job.id) return;          // an old job, finished before this page opened
+  lastJob = '';
+  if (job.state === 'error') showStatus(job.error, false, true);
+  else if (job.state === 'cancelled') { showStatus('Stopped.'); statusTimer = setTimeout(hideStatus, 3000); }
+  else showResult({ message: (job.result.message || 'done') + ` (${job.seconds} s)` });
+  await load();
+}
+async function startJob(path, body) {
+  const started = await api(path, body, true);
+  if (started) { lastJob = 'new'; showStatus('Starting…', true); watchJob(); }
+}
+$('statusStop').onclick = () => api('/api/cancel', {}, true).then(watchJob);
+
+// ---------- Pictures tab ----------
+const STYLES = {
+  'pixel art sprite': 'pixel art sprite, full body, plain white background',
+  'icon': 'game icon, centered, bold shapes, plain white background',
+  'seamless texture': 'seamless texture, top down, even lighting',
+  'character sheet': 'character design, A-pose, front view, plain white background',
+  'concept art': 'concept art, painterly',
+  'dark fantasy': 'dark fantasy',
+};
+const refs = [];
+let picCache = null;
+$('styleChips').innerHTML = Object.keys(STYLES).map(k => `<button data-style="${esc(k)}">${esc(k)}</button>`).join('');
+$('styleChips').querySelectorAll('button').forEach(b => b.onclick = () => {
+  const extra = STYLES[b.dataset.style], box = $('pPrompt');
+  if (!box.value.includes(extra)) box.value = (box.value.trim() ? box.value.trim().replace(/[,.]?$/, ', ') : '') + extra;
+  if (b.dataset.style === 'seamless texture') $('pTile').checked = true;
+  box.focus();
+});
+
+function imageAssets() {
+  return S.assets.filter(a => ['sprite', 'tileset', 'icon', 'ui'].includes(a.kind) && Array.isArray(a.size) &&
+    !(a.frames && Object.values(a.frames).reduce((x, y) => x + y, 0) > 1));
+}
+
+async function renderPictures() {
+  const engine = S.engines && S.engines.picture;
+  const ready = engine && engine.installed;
+  $('engineSetup').style.display = ready ? 'none' : 'block';
+  $('pictureForm').style.display = ready ? 'block' : 'none';
+  if (engine) $('engineInfo').innerHTML = `Pictures are made on this PC with ${esc(engine.model)} (${esc(engine.license)} licence: free to use, ` +
+    `also in games you sell). Setting up installs PyTorch for your graphics card into <code>${esc(engine.folder)}</code> (a few GB, several minutes).`;
+  $('pictureHint').innerHTML = 'The first picture loads the model (about 30 s); more takes of the same description are quicker. ' +
+    'Ask for a <b>plain white background</b> when the picture will become a sprite.';
+  $('refBox').style.display = refs.length ? 'block' : 'none';
+  $('refList').innerHTML = refs.map(r => `<span>${esc(r)}</span>`).join('');
+  const data = await api('/api/pictures', {}, true);
+  if (!data) return;
+  picCache = data.pictures;
+  $('picTitle').textContent = `Pictures (${data.pictures.length})`;
+  const targets = imageAssets();
+  const assetOptions = targets.map(a => option(a.id, `${a.id} (${a.size.join('×')}, ${a.status})`, false)).join('');
+  $('picList').innerHTML = data.pictures.length ? data.pictures.map(p => {
+    const m = p.meta || {};
+    return `<div class="card pic${m.kept ? ' kept' : ''}">
+      <img class="shot" src="${p.url}" alt="" loading="lazy">
+      <div class="prompt" title="${esc(m.prompt)}">${esc(m.prompt || p.name)}</div>
+      <div class="meta">seed ${esc(m.seed)} · ${esc(m.width)}×${esc(m.height)}${m.tile ? ' · seamless' : ''}${m.refs && m.refs.length ? ' · from ' + m.refs.length + ' picture(s)' : ''} · ${esc(m.made || '')}</div>
+      <div class="buttons">
+        <button data-pkeep="${esc(p.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
+        <button data-again="${esc(p.name)}" title="Same description, new seed">Another take</button>
+        <button data-adjust="${esc(p.name)}" title="Put its settings back in the form">Adjust</button>
+        <button data-from="${esc(p.name)}" title="Make the next pictures from this one (e.g. 'the same character from behind')">Work from this</button>
+        <button data-useopen="${esc(p.name)}">Use as asset…</button>
+        <button data-premove="${esc(p.name)}" title="Moves it to pictures/_removed">Remove</button>
+      </div>
+      <div class="use" id="use-${esc(p.name)}">
+        <select>${assetOptions}</select>
+        <label class="check"><input type="checkbox" class="bg" checked> Remove the background</label>
+        <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette</label>
+        <div class="buttons"><button data-use="${esc(p.name)}">Use</button></div>
+        <div class="hint">Shrinks it to the asset's size. At tiny sizes detail is lost: ask Claude to redraw it as pixel art from this picture instead.</div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">No pictures yet. Describe one and press <b>Make it</b>.</div>';
+  const byName = n => data.pictures.find(p => p.name === n);
+  $('picList').querySelectorAll('img.shot').forEach(img => img.onclick = () => { $('bigPic').querySelector('img').src = img.src; $('bigPic').style.display = 'flex'; });
+  $('picList').querySelectorAll('[data-pkeep]').forEach(b => b.onclick = async () => {
+    if (await api('/api/pictures/keep', { name: b.dataset.pkeep, kept: b.dataset.kept !== '1' }, true)) renderPictures(); });
+  $('picList').querySelectorAll('[data-premove]').forEach(b => b.onclick = async () => {
+    if (await api('/api/pictures/remove', { name: b.dataset.premove })) renderPictures(); });
+  $('picList').querySelectorAll('[data-again]').forEach(b => b.onclick = () => {
+    const m = byName(b.dataset.again).meta;
+    startJob('/api/pictures/make', { prompt: m.prompt, width: m.width, height: m.height, tile: m.tile, takes: 1, refs: m.refs || [] });
+  });
+  $('picList').querySelectorAll('[data-adjust]').forEach(b => b.onclick = () => {
+    const m = byName(b.dataset.adjust).meta;
+    $('pPrompt').value = m.prompt || '';
+    const size = `${m.width}x${m.height}`;
+    if ([...$('pSize').options].some(o => o.value === size)) $('pSize').value = size;
+    $('pTile').checked = !!m.tile;
+    $('pSeed').value = m.seed ?? '';
+    refs.splice(0, refs.length, ...(m.refs || []));
+    renderPictures();
+    $('pPrompt').focus();
+  });
+  $('picList').querySelectorAll('[data-from]').forEach(b => b.onclick = () => {
+    if (!refs.includes(b.dataset.from)) refs.push(b.dataset.from);
+    renderPictures();
+    $('pPrompt').focus();
+  });
+  $('picList').querySelectorAll('[data-useopen]').forEach(b => b.onclick = () =>
+    document.getElementById('use-' + b.dataset.useopen).classList.toggle('open'));
+  $('picList').querySelectorAll('[data-use]').forEach(b => b.onclick = async () => {
+    const box = document.getElementById('use-' + b.dataset.use);
+    const id = box.querySelector('select').value;
+    if (!id) return;
+    const done = await api('/api/pictures/use', { name: b.dataset.use, id, background: box.querySelector('.bg').checked, snap: box.querySelector('.snap').checked });
+    if (done) load();
+  });
+}
+$('bigPic').onclick = () => { $('bigPic').style.display = 'none'; };
+$('clearRefs').onclick = () => { refs.splice(0); renderPictures(); };
+$('setupPicture').onclick = () => startJob('/api/engines/setup', { name: 'picture' });
+$('makePictures').onclick = () => {
+  const [width, height] = $('pSize').value.split('x').map(Number);
+  startJob('/api/pictures/make', { prompt: $('pPrompt').value, width, height, takes: +$('pTakes').value || 1,
+    tile: $('pTile').checked, seed: $('pSeed').value, refs });
+};
+
 // ---------- dropping files ----------
 function dropZone(el, key, label) {
   const take = async file => {
@@ -494,6 +673,7 @@ dropZone($('musicDrop'), 'music', 'ready to import');
 $('aScale').value = store.get('aScale', '4');
 setTab(store.get('tab', 'assets'));
 load();
+pollJob();  // a job may already be running (e.g. the page was reopened)
 </script>
 </body>
 </html>

@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import random
 import shutil
 import sys
 from pathlib import Path
 
-from . import art, aseprite, audio, credits, manifest, music, packs, palette, pipeline, sfxr, ui
+from . import art, aseprite, audio, credits, engines, manifest, music, packs, palette, pictures, pipeline, sfxr, ui
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -118,6 +119,30 @@ def main(argv: list[str] | None = None) -> int:
     music_info = music_commands.add_parser("info", help="length, loudness and how cleanly a track loops")
     music_info.add_argument("targets", nargs="+", help="asset ids or music file paths")
 
+    eng = commands.add_parser("engines", help="local AI models (pictures...): set up, list, remove")
+    eng_commands = eng.add_subparsers(dest="engines_command", required=True)
+    eng_commands.add_parser("list", help="each engine: set up or not, its model and license")
+    eng_setup = eng_commands.add_parser("setup", help="install an engine's Python and PyTorch for this PC's graphics card")
+    eng_setup.add_argument("name", choices=list(engines.ENGINES))
+    eng_remove = eng_commands.add_parser("remove", help="delete an engine's Python environment (keeps model files)")
+    eng_remove.add_argument("name", choices=list(engines.ENGINES))
+
+    pic = commands.add_parser("picture", help="make pictures from a description (picture engine) into pictures/")
+    pic.add_argument("prompt", help="what to draw, e.g. \"pixel art sprite of a bat, plain white background\"")
+    pic.add_argument("--takes", type=int, default=1, help="how many (default 1)")
+    pic.add_argument("--size", default="1024x1024", help="WxH (default 1024x1024)")
+    pic.add_argument("--steps", type=int, default=4, help="painting steps (default 4)")
+    pic.add_argument("--seed", type=int, help="seed of the first take (default: random)")
+    pic.add_argument("--tile", action="store_true", help="repeats without a seam (textures)")
+    pic.add_argument("--from", dest="refs", action="append", default=[],
+                     help="a picture in pictures/ to work from (repeatable)")
+    pic_use = commands.add_parser("picture-use", help="make a picture an image asset's file (shrunk, palette)")
+    pic_use.add_argument("picture", help="file name in pictures/")
+    pic_use.add_argument("asset", help="asset id")
+    pic_use.add_argument("--keep-background", action="store_true", help="don't remove the background")
+    pic_use.add_argument("--no-palette", action="store_true", help="don't snap colors to the palette")
+    pic_use.add_argument("--force", action="store_true", help="replace an existing asset file")
+
     page = commands.add_parser("ui", help="open the asset page in a browser window (this PC only)")
     page.add_argument("--port", type=int, default=ui.DEFAULT_PORT, help=f"port (default: {ui.DEFAULT_PORT})")
     page.add_argument("--no-window", action="store_true", help="don't open a window; just print the address")
@@ -127,11 +152,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
                 "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
-                "sfx": _sfx, "music": _music, "ui": _ui}
+                "sfx": _sfx, "music": _music, "ui": _ui, "engines": _engines, "picture": _picture,
+                "picture-use": _picture_use}
     try:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
-            packs.PackError, audio.AudioError, music.MusicError, ui.UserError) as error:
+            packs.PackError, audio.AudioError, music.MusicError, ui.UserError, engines.EngineError,
+            pictures.PictureError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -595,4 +622,55 @@ def _ui(args: argparse.Namespace) -> int:
         print(f"wrote {bat} (double-click it to open the asset page)")
         return 0
     ui.serve(path, args.port, window=not args.no_window)
+    return 0
+
+
+def _engines(args: argparse.Namespace) -> int:
+    if args.engines_command == "list":
+        print(f"engines folder: {engines.home()}")
+        for engine in engines.ENGINES.values():
+            info = engines.status(engine)
+            state = f"set up (PyTorch {info['torch']})" if info["installed"] else "not set up"
+            model = "model downloaded" if info["model_ready"] else "model downloads on first use"
+            print(f"- {engine.name}: {state}; {model}\n    {engine.model}, {engine.license}")
+        return 0
+    if args.engines_command == "setup":
+        for line in engines.setup(args.name):
+            print(line, flush=True)
+        return 0
+    folder = engines.remove(args.name)
+    print(f"removed {folder} (model files in {engines.models_dir()} are kept)")
+    return 0
+
+
+def _picture(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    size = _size(args.size, "--size")
+    assert size is not None
+    request = {"prompt": args.prompt, "width": size[0], "height": size[1], "steps": args.steps, "tile": args.tile,
+               "refs": [str(pictures.path_of(loaded, name)) for name in args.refs]}
+    worker = engines.worker("picture")
+    try:
+        for take in range(max(1, args.takes)):
+            seed = args.seed + take if args.seed is not None else random.randrange(1, 2**31 - 1)
+            out = pictures.new_path(loaded, args.prompt, seed)
+            answer = worker.ask(request | {"out": str(out), "seed": seed}, lambda s: print(f"  {s}", flush=True))
+            pictures.record(out, request, answer)
+            print(f"wrote {out.relative_to(loaded.root).as_posix()} (seed {seed})", flush=True)
+    finally:
+        worker.stop()
+    return 0
+
+
+def _picture_use(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    asset = _asset(loaded, args.asset)
+    if loaded.asset_path(asset).exists() and not args.force:
+        raise pictures.PictureError(f"{loaded.asset_path(asset)} already exists; add --force to replace it")
+    problems = pictures.use_as_asset(loaded, asset, args.picture, background=not args.keep_background,
+                                     snap=not args.no_palette)
+    manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
+    print(f"{asset.id}: {args.picture} -> {asset.file} (source: ai)")
+    for problem in problems:
+        print(f"  - {problem}")
     return 0

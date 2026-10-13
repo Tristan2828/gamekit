@@ -29,6 +29,7 @@ SOURCES = {
     "sfxr": "procedural sound effect",
     "synth": "rendered from a text score",
     "commission": "made by a hired artist or composer",
+    "ai": "made with a local AI model (gamekit engines)",
 }
 # Sources that need a license entry before the asset counts as usable.
 LICENSED_SOURCES = {"pack", "library", "commission"}
@@ -275,23 +276,34 @@ def summary(manifest: Manifest) -> dict[str, dict[str, int]]:
 
 
 def set_status(path: str | Path, asset_id: str, status: str) -> None:
-    """Changes one asset's status in assets.yaml in place, keeping every comment and the layout.
-    Works for one-line entries (`- {id: hero, status: todo, ...}`) and block entries (`- id: hero`
-    with the fields on the lines below)."""
+    """Changes one asset's status in assets.yaml in place (see set_fields)."""
     if status not in STATUSES:
         raise ManifestError(f"status must be one of {', '.join(STATUSES)}")
+    set_fields(path, asset_id, {"status": status})
+
+
+def set_fields(path: str | Path, asset_id: str, values: dict[str, str]) -> None:
+    """Changes simple fields (status, source...) of one asset in assets.yaml in place, keeping every
+    comment and the layout. Works for one-line entries (`- {id: hero, status: todo, ...}`) and block
+    entries (`- id: hero` with the fields on the lines below). Missing fields are added after the id."""
+    for key, value in values.items():
+        if not re.fullmatch(r"[a-z_]+", key) or not re.fullmatch(r"[a-z0-9_]+", str(value)):
+            raise ManifestError(f"can't write {key}: {value!r} (only simple words)")
     path = Path(path)
     text = path.read_bytes().decode("utf-8")  # bytes, so the file keeps its own line endings
     lines = text.splitlines(keepends=True)
     name = re.escape(asset_id)
-    flow = re.compile(r"^\s*-\s*\{.*\bid:\s*[\"']?" + name + r"[\"']?\s*[,}]")
+    id_part = r"\bid:\s*[\"']?" + name + r"[\"']?"
+    flow = re.compile(r"^\s*-\s*\{.*" + id_part + r"\s*[,}]")
     block = re.compile(r"^(\s*)-\s+id:\s*[\"']?" + name + r"[\"']?\s*(#.*)?$")
     for i, line in enumerate(lines):
         if flow.match(line):
-            if re.search(r"\bstatus:\s*\w+", line):
-                lines[i] = re.sub(r"\bstatus:\s*\w+", f"status: {status}", line, count=1)
-            else:
-                lines[i] = re.sub(r"(\bid:\s*[\"']?" + name + r"[\"']?)", rf"\1, status: {status}", line, count=1)
+            for key, value in values.items():
+                if re.search(rf"\b{key}:\s*\w+", line):
+                    line = re.sub(rf"\b{key}:\s*\w+", f"{key}: {value}", line, count=1)
+                else:
+                    line = re.sub("(" + id_part + ")", rf"\1, {key}: {value}", line, count=1)
+            lines[i] = line
             break
         found = block.match(line.rstrip("\r\n"))
         if found:
@@ -299,20 +311,23 @@ def set_status(path: str | Path, asset_id: str, status: str) -> None:
             end = i + 1
             while end < len(lines) and (not lines[end].strip() or len(lines[end]) - len(lines[end].lstrip()) > indent):
                 end += 1
-            for j in range(i + 1, end):
-                if re.match(r"^\s+status:", lines[j]):
-                    lines[j] = re.sub(r"(status:\s*)\w+", rf"\g<1>{status}", lines[j], count=1)
-                    break
-            else:
-                newline = "\r\n" if line.endswith("\r\n") else "\n"
-                lines.insert(i + 1, " " * (indent + 2) + f"status: {status}" + newline)
+            newline = "\r\n" if line.endswith("\r\n") else "\n"
+            for key, value in values.items():
+                for j in range(i + 1, end):
+                    if re.match(rf"^\s+{key}:", lines[j]):
+                        lines[j] = re.sub(rf"({key}:\s*)\w+", rf"\g<1>{value}", lines[j], count=1)
+                        break
+                else:
+                    lines.insert(i + 1, " " * (indent + 2) + f"{key}: {value}" + newline)
+                    end += 1
             break
     else:
         raise ManifestError(f"{asset_id!r} is not in {path.name}")
     changed = "".join(lines)
-    check = {a.id: a.status for a in _parse(changed, path)}
-    if check.get(asset_id) != status:  # never write a file we can't read back the way we meant
-        raise ManifestError(f"couldn't change {asset_id}'s status safely; edit {path.name} by hand")
+    check = {a.id: a for a in _parse(changed, path)}
+    if asset_id not in check or any(str(getattr(check[asset_id], k, None)) != str(v) for k, v in values.items()):
+        # never write a file we can't read back the way we meant
+        raise ManifestError(f"couldn't change {asset_id} safely; edit {path.name} by hand")
     path.write_bytes(changed.encode("utf-8"))
 
 

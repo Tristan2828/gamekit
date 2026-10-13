@@ -37,6 +37,7 @@ Optional programs: Aseprite (exporting your own art), ffmpeg (mp3 / ogg / flac s
 | `/gamekit:art-export` | Export your `.aseprite` files with the Aseprite CLI; check any image's size, frames and palette |
 | `/gamekit:pack-import` | Import a downloaded pack, record its license, and cut sprites, frames or sounds out of it |
 | `/gamekit:sfx-make` | Generate retro sound effects (sfxr presets), tweak and audition variants, or clean up downloaded sounds |
+| `/gamekit:picture-make` | Make pictures from a description on your own PC (concept art, references, icons, seamless textures) and turn one into an asset |
 | `/gamekit:music-make` | Render the game's own music through Godot, or convert downloaded / AI music, into looping OGGs with checked loop points |
 
 ## The asset page
@@ -57,6 +58,14 @@ It only answers this PC, and needs nothing beyond PyYAML and Pillow. Leave its w
 use the page; close it to quit.
 
 **How to use it, tab by tab: [docs/asset-page.md](docs/asset-page.md).**
+
+### Local AI engines
+
+The Pictures tab runs an AI model on your own graphics card: no account, no limits. Each engine is its own
+Python with PyTorch for your card (AMD on Windows via ROCm 7.2.1, NVIDIA via CUDA), kept in
+`%LOCALAPPDATA%\gamekit\engines`; models download on first use (pictures: FLUX.2 klein 4B, Apache 2.0, ~16 GB).
+Set one up from the page or with `gamekit.py engines setup picture` (needs [uv](https://docs.astral.sh/uv/):
+`winget install astral-sh.uv`). The picture worker is adapted from Hearthtone's, with thanks.
 
 The same tools work without Claude, from the game's folder:
 
@@ -105,7 +114,10 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 5 | Music: render the game's scores with Godot headless or convert music files, looping OGG, loudness, loop checks | ✅ done |
 | 6 | First real use in GameTest: game loads files; heroes, card icons, 9 music tracks, 7 sound effects (picked by ear from 2 rounds of candidates) | ✅ done |
 | 7 | Asset page (`gamekit ui`): assets, sounds, music and art tabs in the browser | ✅ done |
-| 8 | AI generators on the page (music, sounds, pictures, voices), once tested on an AMD graphics card | planned |
+| 8 | Local AI engines: tested on an AMD RX 7800 XT (ROCm on Windows); **Pictures** tab with FLUX.2 klein (~8 s a take) | ✅ done |
+| 9 | Music engine (ACE-Step 1.5) | next |
+| 10 | Sound effects (Stable Audio 3) and voices (Qwen3-TTS) engines | planned |
+| 11 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
 
 ## Develop
 

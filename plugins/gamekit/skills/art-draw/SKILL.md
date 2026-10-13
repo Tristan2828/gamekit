@@ -50,6 +50,8 @@ keys:          # optional; char -> palette color name, palette index, or RRGGBB
    has art for it (`replaces`), look at that first to keep the established style and silhouette.
    If `assets.yaml` sets `code_art`, the game's current drawing of the sprite is the entry of that name
    (`replaces`, else the id; frames `<name>_walk_1`...) in that file: start from it.
+   A reference picture helps for new designs: the `picture-make` skill makes one on the user's PC (describe the
+   subject, plain white background), then draw the sprite from it rather than shrinking it.
 2. Write `art/<id>.yaml`. Pixel art basics at small sizes:
    - Dark 1px outline around the silhouette; readable shape first, details second.
    - Light from the top-left: 1 highlight and 1-2 shade colors per material, no gradients.

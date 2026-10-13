@@ -124,6 +124,38 @@ The **todo / draft / done** buttons under every asset change its status straight
 - **Export** (for `self` assets): turns your Aseprite file into the PNG. Needs Aseprite.
 - **Check** / **Check the images**: size and palette problems, listed at the top.
 
+## Pictures tab: AI pictures made on your PC
+
+The picture model (FLUX.2 klein) runs on your own graphics card: no account, no limits, and the pictures
+are yours to use, including in games you sell.
+
+**First time:** the tab shows **Set up**. Press it once: it installs what the model needs for your graphics
+card (a few GB, several minutes). The model itself (about 16 GB) downloads with the first picture.
+
+1. **Describe the picture** in the box. Style first, then the subject: "pixel art sprite of a hooded cultist
+   holding a candle, dark fantasy, full body, plain white background".
+2. The **style buttons** add common endings (pixel art sprite, icon, seamless texture, character sheet...).
+3. **Size**: 768 is faster. **Takes**: how many versions to make. **Repeats without a seam** for floor and wall textures.
+4. **Make it**. The bar at the top shows progress and has a **Stop** button. The first picture loads the model
+   (about 30 s); more takes of the same description take about 8 s each.
+
+Under every picture:
+
+| Button | Does |
+|---|---|
+| **Keep** | Stars it, so you can find your favourites |
+| **Another take** | Same description, new version |
+| **Adjust** | Puts its description and settings back in the form, to change and make again |
+| **Work from this** | The next pictures start from this one: e.g. describe "the same character seen from behind" |
+| **Use as asset…** | Turns it into one of the game's images: background removed, shrunk to the asset's size, colors snapped to the palette. The asset becomes `source: ai`, draft |
+| **Remove** | Moves it to `pictures/_removed` |
+
+Click a picture to see it full size. Pictures are saved in the game's `pictures/` folder.
+
+**Tip for pixel art:** shrinking a big picture to a tiny sprite (16×16 and smaller) loses most of the detail.
+For small sprites, use the picture as a reference and ask Claude to draw the sprite from it. Shrinking works
+well for textures and bigger images.
+
 ## A typical session
 
 1. Open the page and go to **Assets**. Set Status to **Not done** to see what's left.

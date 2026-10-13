@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import art, aseprite, audio, codeart, credits, manifest, music, packs, palette, pipeline, sfxr
+from . import (art, aseprite, audio, codeart, credits, engines, manifest, music, packs, palette, pictures,
+               pipeline, sfxr)
 
 PAGE = Path(__file__).resolve().parent.parent.parent / "ui" / "index.html"
 PLUGIN_JSON = Path(__file__).resolve().parent.parent.parent / ".claude-plugin" / "plugin.json"
@@ -34,7 +35,8 @@ UPLOADS = Path(tempfile.gettempdir()) / "gamekit-uploads"
 DEFAULT_PORT = 7862          # Hearthtone uses 7861
 MAX_UPLOAD = 300 * 1024 * 1024
 KNOWN_ERRORS = (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
-                packs.PackError, audio.AudioError, music.MusicError, codeart.CodeArtError, ValueError)
+                packs.PackError, audio.AudioError, music.MusicError, codeart.CodeArtError, pictures.PictureError,
+                engines.EngineError, ValueError)
 ACTION = threading.Lock()
 mimetypes.add_type("audio/ogg", ".ogg")
 mimetypes.add_type("audio/wav", ".wav")
@@ -111,6 +113,7 @@ def state(loaded: manifest.Manifest) -> dict:
         "music_lufs": loaded.music_lufs,
         "has_render_script": bool(loaded.music.get("render_script")),
         "code_art": loaded.code_art,
+        "engines": {name: engines.status(e) for name, e in engines.ENGINES.items()},
         "problems": manifest.validate(loaded, check_files=False),
         "assets": [asset_json(loaded, a) for a in loaded.assets],
     }
@@ -410,7 +413,157 @@ def do_export(loaded: manifest.Manifest, body: dict) -> dict:
     return {"problems": problems, "message": f"{a.id}: exported"}
 
 
+# --- background jobs (AI engines: loading a model or making a picture takes seconds to minutes) -------
+
+class Job:
+    def __init__(self, label: str) -> None:
+        self.id = f"{time.time():.3f}"
+        self.label = label
+        self.step = ""
+        self.state = "running"        # running | done | error | cancelled
+        self.error = ""
+        self.result: dict = {}
+        self.started = time.time()
+        self.finished = 0.0
+        self.cancel = False
+
+    def json(self) -> dict:
+        end = self.finished or time.time()
+        return {"id": self.id, "label": self.label, "step": self.step, "state": self.state, "error": self.error,
+                "result": self.result, "seconds": round(end - self.started)}
+
+
+JOB_LOCK = threading.Lock()
+CURRENT: dict[str, Job | None] = {"job": None}
+
+
+def start_job(label: str, work: Callable[[Job], dict]) -> Job:
+    """Runs `work` on its own thread; only one job at a time (they share the graphics card)."""
+    with JOB_LOCK:
+        running = CURRENT["job"]
+        if running is not None and running.state == "running":
+            raise UserError(f"still busy: {running.label}")
+        job = Job(label)
+        CURRENT["job"] = job
+
+    def run() -> None:
+        try:
+            job.result = work(job) or {}
+            job.state = "cancelled" if job.cancel else "done"
+        except Exception as error:
+            job.state = "cancelled" if job.cancel else "error"
+            job.error = "" if job.cancel else str(error)
+            if not job.cancel and not isinstance(error, (UserError, engines.EngineError, *KNOWN_ERRORS)):
+                traceback.print_exc()
+        job.finished = time.time()
+
+    threading.Thread(target=run, daemon=True).start()
+    return job
+
+
+def do_job(loaded: manifest.Manifest, body: dict) -> dict:
+    job = CURRENT["job"]
+    return {"job": job.json() if job else None}
+
+
+def do_cancel(loaded: manifest.Manifest, body: dict) -> dict:
+    job = CURRENT["job"]
+    if job is not None and job.state == "running":
+        job.cancel = True
+        engines.stop_all()  # stops the model mid-picture; it loads again next time
+    return {"message": "stopped"}
+
+
+def do_engine_setup(loaded: manifest.Manifest, body: dict) -> dict:
+    engine = engines.get(str(body.get("name", "")))
+
+    def work(job: Job) -> dict:
+        for line in engines.setup(engine.name):
+            job.step = line
+            if job.cancel:
+                raise UserError("stopped")
+        return {"message": f"the {engine.title.lower()} engine is ready"}
+
+    start_job(f"Setting up the {engine.title.lower()} engine", work)
+    return {"message": ""}
+
+
+# --- pictures -----------------------------------------------------------------------------------------
+
+def do_pictures(loaded: manifest.Manifest, body: dict) -> dict:
+    items = []
+    for item in pictures.list_all(loaded):
+        path = pictures.folder(loaded) / item["name"]
+        items.append(item | {"url": file_url(loaded.root, path)})
+    return {"pictures": items, "engine": engines.status(engines.get("picture"))}
+
+
+def _clamp(body: dict, key: str, default: int, low: int, high: int) -> int:
+    value = _number(body, key)
+    return default if value is None else max(low, min(high, int(value)))
+
+
+def do_make_pictures(loaded: manifest.Manifest, body: dict) -> dict:
+    prompt = str(body.get("prompt", "")).strip()
+    if not prompt:
+        raise UserError("describe the picture first")
+    engine = engines.get("picture")
+    if not engines.is_installed(engine):
+        raise UserError("the picture engine isn't set up yet: press Set up on the Pictures tab")
+    takes = _clamp(body, "takes", 1, 1, 8)
+    width, height = _clamp(body, "width", 1024, 256, 1536), _clamp(body, "height", 1024, 256, 1536)
+    steps = _clamp(body, "steps", 4, 1, 12)
+    fixed_seed = _number(body, "seed")
+    refs = [str(pictures.path_of(loaded, name)) for name in body.get("refs") or []]
+    request = {"prompt": prompt, "width": width, "height": height, "steps": steps, "tile": bool(body.get("tile")),
+               "refs": refs}
+
+    def work(job: Job) -> dict:
+        made = []
+        for take in range(takes):
+            if job.cancel:
+                break
+            seed = int(fixed_seed) + take if fixed_seed is not None else random.randrange(1, 2**31 - 1)
+            out = pictures.new_path(loaded, prompt, seed)
+            label = f"picture {take + 1} of {takes}: " if takes > 1 else ""
+
+            def on_step(text: str) -> None:
+                job.step = label + text
+
+            answer = engines.worker("picture").ask(request | {"out": str(out), "seed": seed}, on_step)
+            pictures.record(out, request | {"steps": steps}, answer)
+            made.append(out.name)
+        return {"made": made, "message": f"made {len(made)} picture{'s' if len(made) != 1 else ''}"}
+
+    start_job("Pictures", work)
+    return {"message": ""}
+
+
+def do_keep_picture(loaded: manifest.Manifest, body: dict) -> dict:
+    pictures.keep(loaded, str(body.get("name", "")), bool(body.get("kept", True)))
+    return {"message": ""}
+
+
+def do_remove_picture(loaded: manifest.Manifest, body: dict) -> dict:
+    pictures.remove(loaded, str(body.get("name", "")))
+    return {"message": "moved to pictures/_removed"}
+
+
+def do_use_picture(loaded: manifest.Manifest, body: dict) -> dict:
+    """A picture becomes an image asset's file: background removed, shrunk, snapped to the palette."""
+    a = find(loaded, str(body.get("id", "")))
+    _overwrite_guard(loaded.asset_path(a), body)
+    problems = pictures.use_as_asset(loaded, a, str(body.get("name", "")), background=bool(body.get("background", True)),
+                                     snap=bool(body.get("snap", True)))
+    changes = {"source": "ai"} | ({"status": "draft"} if a.status == "todo" else {})
+    manifest.set_fields(loaded.path, a.id, changes)
+    return {"problems": problems, "message": f"{a.id} now uses {body.get('name')} (source: ai)"}
+
+
 POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
+    "/api/job": do_job, "/api/cancel": do_cancel, "/api/engines/setup": do_engine_setup,
+    "/api/pictures": do_pictures, "/api/pictures/make": do_make_pictures, "/api/pictures/keep": do_keep_picture,
+    "/api/pictures/remove": do_remove_picture, "/api/pictures/use": do_use_picture,
     "/api/status": do_status, "/api/validate": do_validate, "/api/check": do_check, "/api/credits": do_credits,
     "/api/open-folder": do_open_folder, "/api/info": do_info,
     "/api/sfx/takes": do_takes, "/api/sfx/make": do_make_takes, "/api/sfx/keep": do_keep,
@@ -418,7 +571,9 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
     "/api/music/import": do_import_music, "/api/music/render": do_render_music,
     "/api/art/draw": do_draw, "/api/art/export": do_export,
 }
-READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate"}   # these don't wait for a running action
+# these don't wait for a running action (jobs run in the background and only take the job slot)
+READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate", "/api/job", "/api/cancel", "/api/pictures",
+             "/api/engines/setup", "/api/pictures/make"}
 
 
 # --- the server ------------------------------------------------------------------------------------
@@ -618,6 +773,7 @@ def serve(manifest_path: Path, port: int = DEFAULT_PORT, window: bool = True) ->
     except KeyboardInterrupt:
         pass
     finally:
+        engines.stop_all()
         server.server_close()
         shutil.rmtree(UPLOADS, ignore_errors=True)
 

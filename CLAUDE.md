@@ -14,6 +14,9 @@ prefer simple, readable solutions. First user: the Godot game `Tristan2828/GameT
   - `scripts/gamekit.py`: CLI entry; logic in `scripts/gamekit_lib/` (one module per concern).
   - `ui/index.html`: the asset page (`gamekit ui`), served by `gamekit_lib/ui.py` (stdlib `http.server`,
     127.0.0.1 only). One file, no build step or JS libraries; new tabs = a section there + a route in `ui.py`.
+  - `engines/<name>_worker.py`: local AI model workers, run in their own Python (`gamekit_lib/engines.py`
+    sets those up under %LOCALAPPDATA%\gamekit\engines and talks to them: JSON lines, `@@` prefix).
+    The owner's GPU is an AMD RX 7800 XT (ROCm on Windows, Python 3.12); keep CUDA-only add-ons out.
   - `templates/`: files `gamekit init` copies into a game, plus `godot/render_music.gd` for `music render`.
 - `tests/`: `unittest` tests (no pytest needed).
 
