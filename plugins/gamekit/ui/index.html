@@ -109,6 +109,11 @@
   textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
   .pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
   .pic img.shot { width: 100%; border-radius: 6px; display: block; background: #0b0e0d; cursor: zoom-in; }
+  .pic .gameview { display: none; width: 100%; aspect-ratio: 1; border-radius: 6px; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px; color: var(--dim); font-size: 11.5px; text-align: center; }
+  .pic .gameview img { image-rendering: pixelated; }
+  .pic.ingame img.shot { display: none; }
+  .pic.ingame .gameview { display: flex; }
   .pic img.shot.cut { background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 16px 16px; }
   .pic.kept { border-color: var(--accent); }
   .pic .prompt { color: var(--dim); font-size: 12.5px; margin: 6px 0 2px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -347,7 +352,9 @@
     <div class="tab sounds"><h2 id="aiSoundTitle">AI sounds</h2><div id="aiSoundList"></div><h2 class="gap">Retro takes (sfxr) <button id="clearTakes" style="float:right;font-size:12px;text-transform:none;letter-spacing:0">Clear takes</button></h2><div id="takeList"></div></div>
     <div class="tab music"><h2 id="takeTitle">AI takes</h2><div id="musicTakes"></div><h2 class="gap">Every track</h2><div id="musicList"></div></div>
     <div class="tab art"><h2 id="artTitle">Images</h2><div class="gallery" id="gallery"></div></div>
-    <div class="tab pictures"><div id="animPanel"></div><h2 id="picTitle">Pictures</h2><div class="pics" id="picList"></div></div>
+    <div class="tab pictures"><div id="animPanel"></div><h2 id="picTitle">Pictures</h2>
+      <label class="check" style="margin:-4px 0 10px"><input type="checkbox" id="gameAll"> Show every picture as it looks in game</label>
+      <div class="pics" id="picList"></div></div>
     <div class="tab models wip-panel"><h2>Models</h2><div class="ghost"><div class="empty">Your 3D models will show here, each with the pictures it was made from.</div></div></div>
     <div class="tab voices"><h2 id="voiceTitle">Readings</h2><div id="voiceList"></div></div>
   </section>
@@ -766,11 +773,12 @@ async function renderPictures() {
   $('picList').innerHTML = data.pictures.length ? data.pictures.map(p => {
     const m = p.meta || {};
     return `<div class="card pic${m.kept ? ' kept' : ''}">
-      <img class="shot${m.cutout_of ? ' cut' : ''}" src="${p.url}" alt="" loading="lazy">
+      <img class="shot${m.cutout_of ? ' cut' : ''}" src="${p.url}" alt="" loading="lazy"><div class="gameview"></div>
       <div class="prompt" title="${esc(m.prompt)}">${esc(m.prompt || p.name)}</div>
       <div class="meta">seed ${esc(m.seed)} · ${esc(m.width)}×${esc(m.height)}${m.tile ? ' · seamless' : ''}${m.refs && m.refs.length ? ' · from ' + m.refs.length + ' picture(s)' : ''}${m.cutout_of ? ' · cut-out' : ''} · ${esc(m.made || '')}</div>
       <div class="buttons">
         <button data-pkeep="${esc(p.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
+        <button data-game="${esc(p.name)}" title="Switch between the picture and the sprite it would make, as the game shows it">In game</button>
         <button data-again="${esc(p.name)}" title="Same description, new seed">Another take</button>
         <button data-adjust="${esc(p.name)}" title="Put its settings back in the form">Adjust</button>
         <button data-from="${esc(p.name)}" title="Make the next pictures from this one (e.g. 'the same character from behind')">Work from this</button>
@@ -817,6 +825,11 @@ async function renderPictures() {
     renderPictures();
     $('pPrompt').focus();
   });
+  $('picList').querySelectorAll('[data-game]').forEach(b => b.onclick = () => {
+    gameView[b.dataset.game] = !inGame(b.dataset.game);
+    showInGame(b.dataset.game);
+  });
+  data.pictures.forEach(p => { if (inGame(p.name)) showInGame(p.name); });
   $('picList').querySelectorAll('[data-animate]').forEach(b => b.onclick = () => openAnimation(b.dataset.animate));
   renderAnimation();
   $('picList').querySelectorAll('[data-cut]').forEach(b => b.onclick = () =>
@@ -846,7 +859,7 @@ async function renderPictures() {
     if (box.dataset.for && [...box.querySelector('.asset').options].some(o => o.value === box.dataset.for)) box.querySelector('.asset').value = box.dataset.for;
     fillFrames(box);
     previewUse(box, b.dataset.useopen);
-    box.querySelector('.asset').onchange = () => { fillFrames(box); previewUse(box, b.dataset.useopen); };
+    box.querySelector('.asset').onchange = () => { fillFrames(box); previewUse(box, b.dataset.useopen); if (inGame(b.dataset.useopen)) showInGame(b.dataset.useopen); };
     box.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = () => previewUse(box, b.dataset.useopen));
   });
   $('picList').querySelectorAll('[data-use]').forEach(b => b.onclick = async () => {
@@ -864,6 +877,45 @@ $('makePictures').onclick = () => {
   startJob('/api/pictures/make', { prompt: $('pPrompt').value, width, height, takes: +$('pTakes').value || 1,
     tile: $('pTile').checked, seed: $('pSeed').value, refs, for: $('pFor').value });
 };
+
+// ---------- Pictures tab: "In game" view of a picture ----------
+// gameView[name] = true/false when that tile was switched by hand; otherwise the "every picture" box decides
+const gameView = {}, gameCache = {};
+const inGame = name => name in gameView ? gameView[name] : $('gameAll').checked;
+$('gameAll').checked = store.get('gameAll', '') === '1';
+$('gameAll').onchange = () => {
+  store.set('gameAll', $('gameAll').checked ? '1' : '');
+  Object.keys(gameView).forEach(k => delete gameView[k]);
+  (picCache || []).forEach(p => showInGame(p.name));
+};
+
+// the asset a picture is for: the one it was made for, else the one picked under "Use as asset…"
+function pictureAsset(name) {
+  const m = pictureMeta(name), box = document.getElementById('use-' + name);
+  const picked = m.for || (box && box.classList.contains('open') && box.querySelector('.asset').value) || '';
+  return S.assets.find(a => a.id === picked && Array.isArray(a.size));
+}
+
+async function showInGame(name) {
+  const card = document.getElementById('use-' + name) && document.getElementById('use-' + name).closest('.pic');
+  if (!card) return;
+  const on = inGame(name), button = card.querySelector('[data-game]'), view = card.querySelector('.gameview');
+  card.classList.toggle('ingame', on);
+  button.textContent = on ? 'Picture' : 'In game';
+  if (!on) return;
+  const a = pictureAsset(name), floor = ($('animFloor') && $('animFloor').value) || store.get('animFloor', '') || Object.values(floors())[0];
+  view.style.background = floor;
+  if (!a) { view.innerHTML = 'Which sprite is it for? Pick one under <b>Use as asset…</b>, then press <b>In game</b> again.'; return; }
+  const key = `${name}|${a.id}`;
+  if (!gameCache[key]) {
+    view.innerHTML = 'Shrinking…';
+    const data = await api('/api/pictures/preview', { name, id: a.id, background: true, snap: true, outline: true }, true);
+    if (!data) { view.innerHTML = 'Couldn\'t make the sprite (see the bar at the top).'; return; }
+    gameCache[key] = data;
+  }
+  const d = gameCache[key], scale = gameScale();
+  view.innerHTML = `<img src="${d.image}" width="${d.width * scale}" height="${d.height * scale}" alt=""><span>${esc(a.id)}, in game (×${scale})</span>`;
+}
 
 // ---------- Pictures tab: animation ----------
 // anim = {id, base, slots: {frame: picture}, poses: {frame: words}} while the panel is open

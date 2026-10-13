@@ -258,6 +258,11 @@ say only what changes (a pose button: **walk 1**, **walk 2**, **attack**, **wing
 4. **Use all frames** saves every frame file at once. They're all shrunk with **the same crop**, so the creature
    stays in place and keeps its size from frame to frame (shrinking them one at a time would make it jitter).
 
+**In game** on a picture switches it to the sprite it would become (shrunk, outlined, on the palette) at the size
+the game shows it, on your floor color; press **Picture** to switch back. **Show every picture as it looks in game**
+above the list switches them all. It uses the asset the picture was made for (For asset, Animate), or the one you
+pick under **Use as asset…**. Nothing is saved.
+
 **Cut out** makes a copy of a picture with the background made transparent by a second AI model (BiRefNet),
 shown on a checkerboard and marked "cut-out". It keeps soft edges and the gaps between arms and body, which the
 simple background removal can miss. Cut out before you use a picture as a sprite.
