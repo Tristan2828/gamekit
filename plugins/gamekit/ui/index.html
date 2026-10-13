@@ -700,16 +700,14 @@ function shapeOf(w, h) {
   const fit = Math.min(1, 1536 / pw, 1536 / ph);
   return [side(pw * fit), side(ph * fit)];
 }
-// selects a size, adding it to the list (as "label") when it isn't one of the usual ones
+// selects a size as its own entry at the top of the list ("label: W×H"), even when a usual size is the same
 function setSize(w, h, label) {
-  const value = `${w}x${h}`, box = $('pSize');
-  box.querySelectorAll('option[data-custom]').forEach(o => { if (o.value !== value) o.remove(); });
-  if (![...box.options].some(o => o.value === value)) {
-    const o = new Option(`${label || 'Custom'}: ${w}×${h}`, value);
-    o.dataset.custom = '1';
-    box.insertBefore(o, box.firstChild);
-  }
-  box.value = value;
+  const box = $('pSize');
+  box.querySelectorAll('option[data-custom]').forEach(o => o.remove());
+  const o = new Option(`${label || 'Custom'}: ${w}×${h}`, `${w}x${h}`);
+  o.dataset.custom = '1';
+  box.insertBefore(o, box.firstChild);
+  o.selected = true;
 }
 function forAssetPrompt(a) {
   const rules = (S.sprites && S.sprites.prompt) || 'chunky, clean dark outline, limited color palette';
