@@ -154,6 +154,8 @@ def main(argv: list[str] | None = None) -> int:
     pic.add_argument("--tile", action="store_true", help="repeats without a seam (textures)")
     pic.add_argument("--from", dest="refs", action="append", default=[],
                      help="a picture in pictures/ to work from (repeatable)")
+    pic_cut = commands.add_parser("picture-cutout", help="a copy of a picture with a transparent background (cutout engine)")
+    pic_cut.add_argument("pictures", nargs="+", help="file names in pictures/")
     pic_use = commands.add_parser("picture-use", help="make a picture an image asset's file (shrunk, palette)")
     pic_use.add_argument("picture", help="file name in pictures/")
     pic_use.add_argument("asset", help="asset id")
@@ -193,7 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
                 "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
                 "sfx": _sfx, "music": _music, "ui": _ui, "engines": _engines, "picture": _picture,
-                "picture-use": _picture_use, "sound": _sound, "voice": _voice, "take-use": _take_use}
+                "picture-cutout": _picture_cutout, "picture-use": _picture_use, "sound": _sound, "voice": _voice,
+                "take-use": _take_use}
     try:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
@@ -734,6 +737,21 @@ def _picture(args: argparse.Namespace) -> int:
             answer = worker.ask(request | {"out": str(out), "seed": seed}, lambda s: print(f"  {s}", flush=True))
             pictures.record(out, request, answer)
             print(f"wrote {out.relative_to(loaded.root).as_posix()} (seed {seed})", flush=True)
+    finally:
+        worker.stop()
+    return 0
+
+
+def _picture_cutout(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    sources = [pictures.path_of(loaded, name) for name in args.pictures]
+    worker = engines.worker("cutout")
+    try:
+        for source in sources:
+            out = pictures.cutout_path(loaded, source.name)
+            worker.ask({"in": str(source), "out": str(out)}, lambda s: print(f"  {s}", flush=True))
+            pictures.record_cutout(out, source.name, pictures.read_meta(source))
+            print(f"wrote {out.relative_to(loaded.root).as_posix()}", flush=True)
     finally:
         worker.stop()
     return 0

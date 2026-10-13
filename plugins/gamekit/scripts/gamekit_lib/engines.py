@@ -1,4 +1,4 @@
-"""Engines: local AI models (pictures now; music, sounds, voices, 3D later), each in its own Python.
+"""Engines: local AI models (pictures, cut-outs, music, sounds, voices), each in its own Python.
 
 An engine is a Python environment under the engines folder (%LOCALAPPDATA%\\gamekit\\engines on
 Windows, ~/.local/share/gamekit/engines elsewhere; GAMEKIT_ENGINES overrides) with PyTorch for this
@@ -7,7 +7,8 @@ engines/models the first time an engine loads them, so nothing big lives in the 
 
 A worker is a long-running process: one JSON request per line on stdin, one reply per line on stdout,
 prefixed "@@". `{"step": "..."}` lines report progress; the first real reply says {"ready": true}.
-Only one worker runs at a time, since they share the graphics card's memory.
+Only one graphics-card worker runs at a time, since they share its memory; small processor-only
+workers (torch=False, e.g. cut-outs) run alongside.
 """
 from __future__ import annotations
 
@@ -53,6 +54,7 @@ class Engine:
     install_code: bool = False  # pip-install the code itself without its dependencies (they pin CUDA PyTorch)
     note: str = ""              # anything the person must do first, e.g. accept a license
     hf_repos: list[str] = field(default_factory=list)  # models it loads through the Hugging Face cache (engines/hf)
+    torch: bool = True          # False: no PyTorch; a small model on the processor, beside the graphics-card ones
 
 
 ENGINES = {
@@ -62,6 +64,10 @@ ENGINES = {
          "huggingface_hub", "safetensors", "sentencepiece", "numpy", "pillow"],
         "FLUX.2 klein 4B by Black Forest Labs, about 16 GB on first use", "Apache 2.0",
         ["FLUX.2-klein-4B"]),
+    "cutout": Engine(
+        "cutout", "Cut-outs", "cutout_worker.py", ["onnxruntime==1.31.0", "huggingface_hub", "numpy", "pillow"],
+        "BiRefNet lite (ONNX) by Peng Zheng et al., about 210 MB on first use", "MIT",
+        hf_repos=["onnx-community/BiRefNet_lite-ONNX"], torch=False),
     "music": Engine(
         "music", "Music", "music_worker.py", ["soundfile", "loguru", "pytorch_wavelets", "PyWavelets"],
         "ACE-Step 1.5 turbo (+ optional 1.7B planner), about 10 GB on first use", "MIT",
@@ -208,7 +214,10 @@ def setup(name: str, run: Callable[[list[str]], None] | None = None) -> Iterator
     uv = find_uv()
     folder = venv(engine)
     kind = graphics()
-    yield f"{engine.title}: PyTorch for {dict(rocm='an AMD graphics card', cuda='an NVIDIA graphics card', cpu='the processor (slow)')[kind]}"
+    if engine.torch:
+        yield f"{engine.title}: PyTorch for {dict(rocm='an AMD graphics card', cuda='an NVIDIA graphics card', cpu='the processor (slow)')[kind]}"
+    else:
+        yield f"{engine.title}: runs on the processor (no PyTorch needed)"
     if not python(engine).exists():
         yield f"Making its Python {PYTHON} environment in {folder}"
         run([uv, "venv", "--python", PYTHON, str(folder)])
@@ -226,9 +235,10 @@ def setup(name: str, run: Callable[[list[str]], None] | None = None) -> Iterator
         yield f"Using its code at {commit[:7]}"
         run([git, "-C", str(code), "fetch", "--quiet", "origin"])
         run([git, "-C", str(code), "checkout", "--quiet", "--force", commit])
-    yield "Installing PyTorch (a few GB; several minutes the first time)"
-    for command in torch_commands(uv, py, kind):
-        run(command)
+    if engine.torch:
+        yield "Installing PyTorch (a few GB; several minutes the first time)"
+        for command in torch_commands(uv, py, kind):
+            run(command)
     yield "Installing the model's libraries"
     requirements = engine.requirements.get(kind) or engine.requirements.get("*")
     if requirements:
@@ -237,13 +247,18 @@ def setup(name: str, run: Callable[[list[str]], None] | None = None) -> Iterator
     if engine.install_code:
         run([uv, "pip", "install", "--python", py, "--no-deps", "-e", str(code_dir(engine))])
     yield "Checking that it works"
-    check = subprocess.run([py, "-c", "import torch, json; print(json.dumps([torch.__version__, torch.cuda.is_available()]))"],
-                           capture_output=True, text=True, timeout=600)
+    probe = ("import torch, json; print(json.dumps([torch.__version__, torch.cuda.is_available()]))" if engine.torch
+             else "import json; print(json.dumps(['', False]))")
+    check = subprocess.run([py, "-c", probe], capture_output=True, text=True, timeout=600)
     if check.returncode != 0:
-        raise EngineError(f"PyTorch doesn't start: {check.stderr.strip()[-600:]}")
+        raise EngineError(f"{'PyTorch' if engine.torch else 'Its Python'} doesn't start: {check.stderr.strip()[-600:]}")
     version, gpu = json.loads(check.stdout.strip().splitlines()[-1])
     (folder / "gamekit-engine.json").write_text(
-        json.dumps({"engine": name, "torch": version, "gpu": gpu, "kind": kind}, indent=2), encoding="utf-8")
+        json.dumps({"engine": name, "torch": version, "gpu": gpu, "kind": kind if engine.torch else "none"}, indent=2),
+        encoding="utf-8")
+    if not engine.torch:
+        yield "Ready: runs on the processor"
+        return
     yield f"Ready: PyTorch {version}, " + ("using the graphics card" if gpu else "on the processor (no graphics card found)")
 
 
@@ -340,8 +355,7 @@ class Worker:
                 continue
             return message
         code = self.proc.wait()
-        self.proc = None
-        self._close_log()
+        self.stop()
         raise EngineError(f"the {self.engine.name} model stopped unexpectedly (exit code {code}); see {self.log_path}")
 
     def stop(self) -> None:
@@ -365,9 +379,9 @@ _workers: dict[str, Worker] = {}
 
 
 def worker(name: str) -> Worker:
-    """The engine's worker, stopping any other engine first (one model on the graphics card at a time)."""
+    """The engine's worker, stopping any other graphics-card engine first (one model on the card at a time)."""
     for other, w in list(_workers.items()):
-        if other != name and w.running():
+        if other != name and w.running() and w.engine.torch and get(name).torch:
             w.stop()
     if name not in _workers:
         _workers[name] = Worker(get(name))

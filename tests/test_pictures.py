@@ -19,7 +19,8 @@ from gamekit_lib import engines, manifest, pictures, ui  # noqa: E402
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "plugins" / "gamekit" / "templates"
 
-# Plays the picture model: same protocol, draws a red square on white instead of painting.
+# Plays the picture model: same protocol, draws a red square on white instead of painting. Plays the
+# cut-out model too ({"in", "out"}): white becomes transparent.
 FAKE_WORKER = textwrap.dedent('''
     import json, sys
     from PIL import Image, ImageDraw
@@ -30,6 +31,11 @@ FAKE_WORKER = textwrap.dedent('''
     reply({"ready": True})
     for line in sys.stdin:
         r = json.loads(line)
+        if "in" in r:
+            image = Image.open(r["in"]).convert("RGBA")
+            image.putdata([(0, 0, 0, 0) if p[:3] == (255, 255, 255) else p for p in image.getdata()])
+            image.save(r["out"])
+            reply({"ok": True, "width": image.width, "height": image.height}); continue
         if r["prompt"] == "fail":
             reply({"ok": False, "error": "could not paint"}); continue
         reply({"step": "Painting: step 1 of 1"})
@@ -112,6 +118,34 @@ class WorkerTests(FakeWorkerMixin, unittest.TestCase):
             engines.get("nope")
 
 
+class CutoutEngineTests(FakeWorkerMixin, unittest.TestCase):
+    def test_setup_skips_pytorch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp,                 unittest.mock.patch.dict("os.environ", {"GAMEKIT_ENGINES": tmp, "GAMEKIT_TORCH": "cpu"}),                 unittest.mock.patch.object(engines, "find_uv", lambda: "uv"):
+            ran: list[list[str]] = []
+            steps = []
+            for line in engines.setup("cutout", run=ran.append):
+                steps.append(line)
+                if line == "Checking that it works":  # the check needs a real Python
+                    break
+            flat = [" ".join(c) for c in ran]
+            self.assertFalse(any("torch" in c for c in flat), flat)
+            self.assertTrue(any("onnxruntime" in c for c in flat))
+            self.assertIn("runs on the processor", steps[0])
+
+    def test_runs_beside_the_graphics_card_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp,                 unittest.mock.patch.dict("os.environ", {"GAMEKIT_ENGINES": tmp}),                 unittest.mock.patch.dict(engines._workers, clear=True):
+            painter = self.fake_worker(Path(tmp))
+            painter.start()
+            engines._workers["picture"] = painter
+            try:
+                engines.worker("cutout")
+                self.assertTrue(painter.running())  # a processor-only model doesn't stop the picture model
+                engines.worker("music")
+                self.assertFalse(painter.running())  # another graphics-card model does
+            finally:
+                painter.stop()
+
+
 class PictureFileTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -162,6 +196,15 @@ class PictureFileTests(unittest.TestCase):
         self.assertEqual(sprite.getpixel((4, 0))[3], 255)        # 40x80 fits 4x8: full height
         with self.assertRaises(pictures.PictureError):
             pictures.to_sprite(Image.new("RGB", (50, 50), "white"), (8, 8))
+
+    def test_a_cut_out_keeps_its_transparency(self) -> None:
+        # the subject is the same red as the corners: flood-filling would take it all, a cut-out's alpha doesn't
+        image = Image.new("RGBA", (100, 100), (200, 30, 30, 0))
+        ImageDraw.Draw(image).rectangle([40, 20, 59, 99], fill=(200, 30, 30, 255))
+        self.assertTrue(pictures.has_transparency(image))
+        self.assertFalse(pictures.has_transparency(Image.new("RGBA", (4, 4), "white")))
+        sprite = pictures.to_sprite(image, (8, 8))
+        self.assertEqual((sprite.getpixel((0, 0))[3], sprite.getpixel((4, 7))), (0, (200, 30, 30, 255)))
 
     def test_use_as_asset(self) -> None:
         name = self.picture()
@@ -254,6 +297,24 @@ class PicturePageTests(FakeWorkerMixin, unittest.TestCase):
         self.assertEqual((blob.source, blob.status), ("ai", "draft"))
         code, data = self.post("/api/pictures/use", {"name": "a-red-block-9.png", "id": "blob"})
         self.assertEqual((code, data["error"]), (400, "REPLACE?"))
+
+    def test_cut_out(self) -> None:
+        self.post("/api/pictures/make", {"prompt": "a red block", "width": 256, "height": 256, "seed": 3})
+        self.wait_for_job()
+        self.assertEqual(self.post("/api/pictures/cutout", {"name": "nope.png"})[0], 400)
+        code, data = self.post("/api/pictures/cutout", {"name": "a-red-block-3.png"})
+        self.assertEqual(code, 200, data)
+        job = self.wait_for_job()
+        self.assertEqual(job["result"]["made"], ["a-red-block-3-cutout.png"], job)
+        with Image.open(self.root / "pictures" / "a-red-block-3-cutout.png") as cut:
+            self.assertEqual((cut.mode, cut.getpixel((0, 0))[3]), ("RGBA", 0))
+        meta = {p["name"]: p["meta"] for p in self.post("/api/pictures", {})[1]["pictures"]}["a-red-block-3-cutout.png"]
+        self.assertEqual((meta["cutout_of"], meta["prompt"], meta["seed"], meta["kept"]),
+                         ("a-red-block-3.png", "a red block", 3, False))
+        self.post("/api/pictures/cutout", {"name": "a-red-block-3.png"})
+        self.assertEqual(self.wait_for_job()["result"]["made"], ["a-red-block-3-cutout-2.png"])
+        code, data = self.post("/api/pictures/use", {"name": "a-red-block-3-cutout.png", "id": "blob"})
+        self.assertEqual(code, 200, data)
 
     def test_errors_and_one_job_at_a_time(self) -> None:
         self.post("/api/pictures/make", {"prompt": "fail"})

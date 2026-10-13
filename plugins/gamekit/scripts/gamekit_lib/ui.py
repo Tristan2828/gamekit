@@ -539,6 +539,26 @@ def do_make_pictures(loaded: manifest.Manifest, body: dict) -> dict:
     return {"message": ""}
 
 
+def do_cutout_picture(loaded: manifest.Manifest, body: dict) -> dict:
+    """A copy of a picture with its background made transparent (cut-out engine, on the processor)."""
+    name = str(body.get("name", ""))
+    source = pictures.path_of(loaded, name)
+    if not engines.is_installed(engines.get("cutout")):
+        raise UserError("the cut-out engine isn't set up yet: press Set up next to Cut out on the Pictures tab")
+
+    def work(job: Job) -> dict:
+        def on_step(text: str) -> None:
+            job.step = text
+
+        out = pictures.cutout_path(loaded, name)
+        engines.worker("cutout").ask({"in": str(source), "out": str(out)}, on_step)
+        pictures.record_cutout(out, name, pictures.read_meta(source))
+        return {"made": [out.name], "message": f"cut out {name} -> {out.name}"}
+
+    start_job("Cut-out", work)
+    return {"message": ""}
+
+
 def do_keep_picture(loaded: manifest.Manifest, body: dict) -> dict:
     pictures.keep(loaded, str(body.get("name", "")), bool(body.get("kept", True)))
     return {"message": ""}
@@ -731,7 +751,8 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
     "/api/musictakes/remove": do_remove_music, "/api/musictakes/use": do_use_music,
     "/api/job": do_job, "/api/cancel": do_cancel, "/api/engines/setup": do_engine_setup,
     "/api/pictures": do_pictures, "/api/pictures/make": do_make_pictures, "/api/pictures/keep": do_keep_picture,
-    "/api/pictures/remove": do_remove_picture, "/api/pictures/use": do_use_picture,
+    "/api/pictures/remove": do_remove_picture,
+    "/api/pictures/cutout": do_cutout_picture, "/api/pictures/use": do_use_picture,
     "/api/status": do_status, "/api/validate": do_validate, "/api/check": do_check, "/api/credits": do_credits,
     "/api/open-folder": do_open_folder, "/api/info": do_info,
     "/api/sfx/takes": do_takes, "/api/sfx/make": do_make_takes, "/api/sfx/keep": do_keep,
@@ -742,7 +763,7 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
 # these don't wait for a running action (jobs run in the background and only take the job slot)
 READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate", "/api/job", "/api/cancel", "/api/pictures",
              "/api/engines/setup", "/api/pictures/make", "/api/musictakes", "/api/musictakes/make", "/api/takes",
-             "/api/sounds/make", "/api/voices/make"}
+             "/api/sounds/make", "/api/voices/make", "/api/pictures/cutout"}
 
 
 # --- the server ------------------------------------------------------------------------------------

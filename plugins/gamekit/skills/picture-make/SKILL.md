@@ -1,6 +1,6 @@
 ---
 name: picture-make
-description: Make pictures from a description on the user's own PC with the local picture engine (FLUX.2 klein), for concept art, references for pixel sprites, icons, seamless textures and character turnarounds, and turn a picture into an image asset (shrunk to size, palette-snapped). Use when the user wants an AI picture, a texture, concept art, a reference to draw from, or asks to set up the picture engine.
+description: Make pictures from a description on the user's own PC with the local picture engine (FLUX.2 klein), for concept art, references for pixel sprites, icons, seamless textures and character turnarounds, cut a subject out of its background (BiRefNet), and turn a picture into an image asset (shrunk to size, palette-snapped). Use when the user wants an AI picture, a texture, concept art, a reference to draw from, a transparent background, or asks to set up the picture or cut-out engine.
 ---
 
 # Make pictures with the local picture engine
@@ -11,11 +11,13 @@ CLI (run from the game's root, the folder with `assets.yaml`; `python3` if `pyth
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines list
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines setup picture      # once per PC; ask first (several GB)
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture "<description>" [--takes 2] [--size 1024x1024] [--tile] [--seed N] [--from <picture.png>]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines setup cutout       # small (~300 MB, no PyTorch); fine to run
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-cutout <picture.png> [more.png...]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-use <picture.png> <asset-id> [--keep-background] [--no-palette] [--force]
 ```
 
 The user can do all of this on the Pictures tab of the asset page (`gamekit ui`), which is easier for them:
-pictures appear as they're made, with Keep / Another take / Work from this / Use as asset buttons.
+pictures appear as they're made, with Keep / Another take / Work from this / Cut out / Use as asset buttons.
 
 ## How it runs
 
@@ -27,13 +29,18 @@ pictures appear as they're made, with Keep / Another take / Work from this / Use
 - Timing on a 16 GB card: loading ~30 s; a new description ~30 s; more takes of the same description ~8 s.
   The model runs one picture at a time and the CLI loads it per command, so prefer `--takes N` over
   several commands.
+- Cut-outs: a second engine, `cutout` (BiRefNet lite as ONNX, MIT, ~210 MB), on the processor (~8 s a picture),
+  so it runs beside the picture model. `picture-cutout` writes `<name>-cutout.png` with a transparent background
+  and a `.json` with `cutout_of`.
 - Logs: `%LOCALAPPDATA%\gamekit\engines\logs\picture.log`. Out-of-memory or very slow pictures on a smaller
   card: `GAMEKIT_PICTURE_MODE=offload`.
 
 ## Writing descriptions
 
 - Say the style first, then the subject, then the setting: "pixel art sprite of a hooded cultist holding a
-  candle, dark fantasy, full body, plain white background".
+  candle, dark fantasy, full body, plain white background". FLUX.2 klein draws clean pixel-art sprites from
+  "pixel art sprite, ..., clean dark outline, limited color palette, plain white background, game asset" without
+  any add-on (a pixel-art LoRA was tried and was slower and worse).
 - For anything that becomes a sprite or icon: **plain white background**, whole subject in view, centered.
 - Textures: "seamless ... texture, top down, even lighting" plus `--tile`.
 - Turnarounds (and later 3D models): "character design, A-pose, front view, plain white background", then
@@ -42,12 +49,15 @@ pictures appear as they're made, with Keep / Another take / Work from this / Use
 
 ## Pictures and pixel art sprites
 
-`picture-use` removes a plain background, crops to the subject, shrinks it to the asset's size (bottom-centered),
+`picture-use` removes a plain background (a flood fill from the corners; a picture that is already transparent,
+such as a cut-out, keeps its own), crops to the subject, shrinks it to the asset's size (bottom-centered),
 makes edges hard and snaps colors to the palette; it sets the asset's `source: ai` (and `todo` -> `draft`).
 
 - **Small sprites (under ~24 px): don't shrink pictures; redraw them.** Shrinking a painting to 16x16 gives
   speckled, outline-less pixels. Use the picture as a reference and draw the sprite yourself with the
   `art-draw` skill (silhouette, outline, a few palette colors), then say it was drawn from the picture.
+- For anything with a busy background, soft edges or gaps (arms, legs, hair), run `picture-cutout` first and
+  use the cut-out.
 - Shrinking works for textures (`tileset` assets fill the whole tile), backgrounds and larger art.
 - Check for palette colors with a special meaning in the game (e.g. GameTest's magenta = player color) after
   snapping; `--no-palette` keeps the picture's own colors.

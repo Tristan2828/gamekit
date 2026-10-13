@@ -102,6 +102,7 @@
   textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
   .pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
   .pic img.shot { width: 100%; border-radius: 6px; display: block; background: #0b0e0d; cursor: zoom-in; }
+  .pic img.shot.cut { background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 16px 16px; }
   .pic.kept { border-color: var(--accent); }
   .pic .prompt { color: var(--dim); font-size: 12.5px; margin: 6px 0 2px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .pic .buttons button { font-size: 12.5px; padding: 3px 9px; }
@@ -623,8 +624,8 @@ $('statusStop').onclick = () => api('/api/cancel', {}, true).then(watchJob);
 
 // ---------- Pictures tab ----------
 const STYLES = {
-  'pixel art sprite': 'pixel art sprite, full body, plain white background',
-  'icon': 'game icon, centered, bold shapes, plain white background',
+  'pixel art sprite': 'pixel art sprite, full body, clean dark outline, limited color palette, plain white background, game asset',
+  'item icon': 'pixel art item icon, a single object, bold outline, limited color palette, centered, plain white background',
   'seamless texture': 'seamless texture, top down, even lighting',
   'character sheet': 'character design, A-pose, front view, plain white background',
   'concept art': 'concept art, painterly',
@@ -653,32 +654,34 @@ async function renderPictures() {
   if (engine) $('engineInfo').innerHTML = `Pictures are made on this PC with ${esc(engine.model)} (${esc(engine.license)} licence: free to use, ` +
     `also in games you sell). Setting up installs PyTorch for your graphics card into <code>${esc(engine.folder)}</code> (a few GB, several minutes).`;
   $('pictureHint').innerHTML = 'The first picture loads the model (about 30 s); more takes of the same description are quicker. ' +
-    'Ask for a <b>plain white background</b> when the picture will become a sprite.';
+    'Ask for a <b>plain white background</b> when the picture will become a sprite, then <b>Cut out</b> gives it a clean transparent one.';
   $('refBox').style.display = refs.length ? 'block' : 'none';
   $('refList').innerHTML = refs.map(r => `<span>${esc(r)}</span>`).join('');
   const data = await api('/api/pictures', {}, true);
   if (!data) return;
   picCache = data.pictures;
   $('picTitle').textContent = `Pictures (${data.pictures.length})`;
+  const cut = S.engines && S.engines.cutout, cutReady = !!(cut && cut.installed);
   const targets = imageAssets();
   const assetOptions = targets.map(a => option(a.id, `${a.id} (${a.size.join('×')}, ${a.status})`, false)).join('');
   $('picList').innerHTML = data.pictures.length ? data.pictures.map(p => {
     const m = p.meta || {};
     return `<div class="card pic${m.kept ? ' kept' : ''}">
-      <img class="shot" src="${p.url}" alt="" loading="lazy">
+      <img class="shot${m.cutout_of ? ' cut' : ''}" src="${p.url}" alt="" loading="lazy">
       <div class="prompt" title="${esc(m.prompt)}">${esc(m.prompt || p.name)}</div>
-      <div class="meta">seed ${esc(m.seed)} · ${esc(m.width)}×${esc(m.height)}${m.tile ? ' · seamless' : ''}${m.refs && m.refs.length ? ' · from ' + m.refs.length + ' picture(s)' : ''} · ${esc(m.made || '')}</div>
+      <div class="meta">seed ${esc(m.seed)} · ${esc(m.width)}×${esc(m.height)}${m.tile ? ' · seamless' : ''}${m.refs && m.refs.length ? ' · from ' + m.refs.length + ' picture(s)' : ''}${m.cutout_of ? ' · cut-out' : ''} · ${esc(m.made || '')}</div>
       <div class="buttons">
         <button data-pkeep="${esc(p.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
         <button data-again="${esc(p.name)}" title="Same description, new seed">Another take</button>
         <button data-adjust="${esc(p.name)}" title="Put its settings back in the form">Adjust</button>
         <button data-from="${esc(p.name)}" title="Make the next pictures from this one (e.g. 'the same character from behind')">Work from this</button>
+        ${m.cutout_of ? '' : `<button data-cut="${esc(p.name)}" title="${cutReady ? 'A copy with the background made transparent (AI, about 10 s)' : 'Sets up the cut-out engine first (about 300 MB, once)'}">${cutReady ? 'Cut out' : 'Cut out (set up)'}</button>`}
         <button data-useopen="${esc(p.name)}">Use as asset…</button>
         <button data-premove="${esc(p.name)}" title="Moves it to pictures/_removed">Remove</button>
       </div>
       <div class="use" id="use-${esc(p.name)}">
         <select>${assetOptions}</select>
-        <label class="check"><input type="checkbox" class="bg" checked> Remove the background</label>
+        <label class="check"><input type="checkbox" class="bg" checked> Remove the background${m.cutout_of ? ' (already cut out)' : ''}</label>
         <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette</label>
         <div class="buttons"><button data-use="${esc(p.name)}">Use</button></div>
         <div class="hint">Shrinks it to the asset's size. At tiny sizes detail is lost: ask Claude to redraw it as pixel art from this picture instead.</div>
@@ -711,6 +714,8 @@ async function renderPictures() {
     renderPictures();
     $('pPrompt').focus();
   });
+  $('picList').querySelectorAll('[data-cut]').forEach(b => b.onclick = () =>
+    cutReady ? startJob('/api/pictures/cutout', { name: b.dataset.cut }) : startJob('/api/engines/setup', { name: 'cutout' }));
   $('picList').querySelectorAll('[data-useopen]').forEach(b => b.onclick = () =>
     document.getElementById('use-' + b.dataset.useopen).classList.toggle('open'));
   $('picList').querySelectorAll('[data-use]').forEach(b => b.onclick = async () => {

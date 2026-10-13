@@ -70,7 +70,8 @@ The **todo / draft / done** buttons under every asset change its status straight
 
 **Setting up (once per engine, per PC):** a tab whose engine isn't set up shows a **Set up** button. It installs
 what the model needs for your graphics card (a few GB, several minutes); the bar at the top shows progress.
-On your PC all four are already set up.
+On your PC the four big ones are already set up; the small cut-out engine sets itself up the first time you
+press **Cut out (set up)** on the Pictures tab (about 300 MB, a minute).
 
 **Making things:** press **Make it**. The bar at the top shows what's happening and how long it's taken, with a
 **Stop** button. The first time you use an engine after starting the page it loads its model (30 to 50 seconds);
@@ -78,7 +79,8 @@ after that it's quick, as long as you stay with that engine.
 
 **One at a time:** the engines share your graphics card, so only one is loaded at once. Switching from, say,
 pictures to music unloads the picture model, and the next picture loads it again. Make a batch of one kind,
-then move on. While one job runs, other AI buttons say "still busy".
+then move on. While one job runs, other AI buttons say "still busy". The cut-out engine is the exception: it runs on
+the processor, so it doesn't unload the picture model.
 
 **Every take has the same buttons:**
 
@@ -103,9 +105,10 @@ the game or in gamekit.
 | Music | ~40 s | ~1.5 s per second of music (a 30-second track in ~50 s) |
 | Sounds | ~45 s | well under a second a sound |
 | Voices | ~35 s | a few seconds for a short line, ~20 s for a long one |
+| Cut-outs | ~5 s | ~8 s a picture (on the processor) |
 
 **Licences:** everything they make is yours to use, also in games you sell. Pictures (FLUX.2 klein) and voices
-(Qwen3-TTS) are Apache 2.0, music (ACE-Step) is MIT. Sound effects (Stable Audio 3) use Stability AI's Community
+(Qwen3-TTS) are Apache 2.0, music (ACE-Step) and cut-outs (BiRefNet) are MIT. Sound effects (Stable Audio 3) use Stability AI's Community
 License: free while you earn under $1M a year from what you make with it.
 
 **Claude can't hear or see the way you do:** it checks takes by numbers (length, loudness, shape) and can look at
@@ -229,14 +232,19 @@ Pictures from a description (FLUX.2 klein), on your graphics card.
 
 1. **Describe the picture** in the box. Style first, then the subject: "pixel art sprite of a hooded cultist
    holding a candle, dark fantasy, full body, plain white background".
-2. The **style buttons** add common endings (pixel art sprite, icon, seamless texture, character sheet,
-   concept art, dark fantasy).
+2. The **style buttons** add common endings (pixel art sprite, item icon, seamless texture, character sheet,
+   concept art, dark fantasy). FLUX.2 klein draws good pixel art on its own with the **pixel art sprite** words.
 3. **Size**: 768 is faster. **Takes**: how many versions. **Repeats without a seam** for floor and wall textures.
    **Seed**: leave empty for new versions.
 4. **Make it**. Click any picture to see it full size.
 
 Besides the usual take buttons, pictures have **Work from this**: the next pictures start from that one, so you
 can describe "the same character seen from behind" and get a matching back view.
+
+**Cut out** makes a copy of a picture with the background made transparent by a second AI model (BiRefNet),
+shown on a checkerboard and marked "cut-out". It keeps soft edges, hair and gaps between arms and body, which the
+simple background removal under **Use as asset…** can miss, and it works on busy backgrounds too. Use the cut-out
+as the asset (its transparency is kept as it is).
 
 **Use as asset…** turns a picture into one of the game's images: the background removed (**Remove the
 background**), shrunk to the asset's size, and the colors snapped to the palette (**Snap to the palette**).

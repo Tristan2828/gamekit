@@ -68,7 +68,8 @@ Python with PyTorch for your card (AMD on Windows via ROCm 7.2.1, NVIDIA via CUD
 Set one up from the page or with `gamekit.py engines setup picture` (needs [uv](https://docs.astral.sh/uv/):
 `winget install astral-sh.uv`). Music: ACE-Step 1.5 (MIT, ~10 GB; its code is fetched with git at a pinned
 commit). Voices: Qwen3-TTS VoiceDesign (Apache 2.0, ~4 GB). Sounds: Stable Audio 3 Small SFX (Stability AI
-Community License, gated: accept it once on Hugging Face). The workers are adapted from Hearthtone's, with thanks.
+Community License, gated: accept it once on Hugging Face). Cut-outs (transparent backgrounds): BiRefNet lite as
+ONNX (MIT, ~210 MB, on the processor, no PyTorch). The workers are adapted from Hearthtone's, with thanks.
 
 The same tools work without Claude, from the game's folder:
 
@@ -120,7 +121,8 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 8 | Local AI engines: tested on an AMD RX 7800 XT (ROCm on Windows); **Pictures** tab with FLUX.2 klein (~8 s a take) | ✅ done |
 | 9 | **Music** engine: ACE-Step 1.5 on AMD (~1.5 s per second of music), AI takes on the Music tab, "use for a track" with loop cut | ✅ done |
 | 10 | **Voices** tab (Qwen3-TTS, ~2x real time) and AI **sound effects** (Stable Audio 3, ~0.3 s a sound; gated license, accepted once per person) | ✅ done |
-| 11 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
+| 11 | **Cut out** on the Pictures tab: transparent backgrounds with BiRefNet (~8 s, on the processor, beside the picture model) | ✅ done |
+| 12 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
 
 ## Develop
 

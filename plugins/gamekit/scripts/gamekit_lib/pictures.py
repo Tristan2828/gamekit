@@ -2,6 +2,8 @@
 
 Each picture is a PNG with a .json beside it holding what made it (description, seed, size...), so a
 take can be remade or adjusted. Removed pictures move to pictures/_removed/ (see made.py).
+
+A cut-out is a copy of a picture with its background made transparent by the cut-out engine (BiRefNet).
 """
 from __future__ import annotations
 
@@ -41,6 +43,21 @@ def record(path: Path, request: dict, answer: dict) -> dict:
                               "refs": [Path(r).name for r in request.get("refs", [])], "model": "FLUX.2 klein 4B"})
 
 
+def cutout_path(manifest: Manifest, name: str) -> Path:
+    """A free file name for a cut-out of picture `name`: <name>-cutout.png (numbered if taken)."""
+    source = path_of(manifest, name)
+    path, n = source.with_name(f"{source.stem}-cutout.png"), 2
+    while path.exists():
+        path, n = source.with_name(f"{source.stem}-cutout-{n}.png"), n + 1
+    return path
+
+
+def record_cutout(path: Path, name: str, source_meta: dict) -> dict:
+    """A cut-out keeps what made its picture, plus which picture it was cut from."""
+    keep = {k: v for k, v in source_meta.items() if k not in ("made", "kept", "cutout_of")}
+    return made.record(path, keep | {"cutout_of": name, "cutout_model": "BiRefNet lite"})
+
+
 def list_all(manifest: Manifest) -> list[dict]:
     return made.list_all(manifest, "picture")
 
@@ -75,11 +92,16 @@ def remove_background(image: Image.Image, tolerance: int = 48) -> Image.Image:
     return out
 
 
+def has_transparency(image: Image.Image) -> bool:
+    return image.mode in ("RGBA", "LA") and image.getchannel("A").getextrema()[0] < 255
+
+
 def to_sprite(image: Image.Image, size: tuple[int, int], colors: list[Color] | None = None,
               background: bool = True) -> Image.Image:
     """A big picture as a small pixel art sprite: background removed, cropped to the subject, shrunk to fit
-    `size` (centered, bottom-aligned so it stands on the ground), hard-edged, and snapped to `colors`."""
-    image = remove_background(image) if background else image.convert("RGBA")
+    `size` (centered, bottom-aligned so it stands on the ground), hard-edged, and snapped to `colors`.
+    A picture that already has a transparent background (a cut-out) keeps it."""
+    image = remove_background(image) if background and not has_transparency(image) else image.convert("RGBA")
     box = image.getchannel("A").getbbox()
     if box is None:
         raise PictureError("the whole picture is background: try without removing the background")

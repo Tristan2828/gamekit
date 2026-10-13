@@ -143,7 +143,7 @@ class ManifestError(Exception):
 
 
 def load(path: str | Path) -> Manifest:
-    path = Path(path)
+    path = Path(path).absolute()  # its paths go to AI workers, which run in their own folder
     if not path.exists():
         raise ManifestError(f"{path} not found. Run `gamekit init` first.")
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
