@@ -71,6 +71,7 @@ class Manifest:
     music: dict = field(default_factory=dict)
     frame_files: bool = False
     audio: dict = field(default_factory=dict)
+    code_art: str = ""
 
     @property
     def sfx_peak_db(self) -> float:
@@ -89,18 +90,7 @@ class Manifest:
         if not (self.frame_files and asset.kind == "sprite" and isinstance(asset.frames, dict) and asset.frames):
             return []
         base = self.asset_path(asset)
-        stem, folder = base.stem, base.parent
-        paths = []
-        for anim, count in asset.frames.items():
-            for i in range(int(count)):
-                if anim == "idle":
-                    name = stem if i == 0 else f"{stem}_{i}"
-                elif count == 1:
-                    name = f"{stem}_{anim}"
-                else:
-                    name = f"{stem}_{anim}_{i + 1}"
-                paths.append((anim, i, folder / f"{name}.png"))
-        return paths
+        return [(anim, i, base.parent / f"{name}.png") for anim, i, name in frame_names(asset, base.stem)]
 
     @property
     def root(self) -> Path:
@@ -126,6 +116,24 @@ class Manifest:
             return self.root / asset.src
         default = DEFAULT_SOURCES.get(asset.source)
         return self.root / default.format(id=asset.id) if default else None
+
+
+def frame_names(asset: Asset, stem: str) -> list[tuple[str, int, str]]:
+    """(animation, index, name) per frame: idle frame 0 is `stem`, more idle frames `stem_1`, `stem_2`...;
+    another animation's frames `stem_<anim>_1`, `_2`... (`stem_<anim>` when it has one frame).
+    A still image is just `stem`."""
+    frames = asset.frames if isinstance(asset.frames, dict) and asset.frames else {"idle": 1}
+    names = []
+    for anim, count in frames.items():
+        for i in range(int(count)):
+            if anim == "idle":
+                name = stem if i == 0 else f"{stem}_{i}"
+            elif count == 1:
+                name = f"{stem}_{anim}"
+            else:
+                name = f"{stem}_{anim}_{i + 1}"
+            names.append((anim, i, name))
+    return names
 
 
 class ManifestError(Exception):
@@ -156,6 +164,7 @@ def load(path: str | Path) -> Manifest:
         music=dict(data.get("music") or {}) if isinstance(data.get("music") or {}, dict) else {"_bad": True},
         frame_files=data.get("frame_files", False) is True,
         audio=dict(data.get("audio") or {}) if isinstance(data.get("audio") or {}, dict) else {"_bad": True},
+        code_art=str(data.get("code_art") or ""),
     )
 
 
@@ -195,6 +204,8 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
             value = manifest.audio.get(key)
             if value is not None and (not isinstance(value, (int, float)) or value > 0):
                 problems.append(f"audio.{key}: a negative number (dB), got {value!r}")
+    if manifest.code_art and not (manifest.root / manifest.code_art).is_file():
+        problems.append(f"code_art: {manifest.code_art} not found")
     seen: set[str] = set()
     for i, a in enumerate(manifest.assets):
         where = f"assets[{i}] ({a.id or 'no id'})"

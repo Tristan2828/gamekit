@@ -113,6 +113,10 @@ The **todo / draft / done** buttons under every asset change its status straight
 
 - A gallery of every image, enlarged with crisp pixels. Use **Zoom** to change the size.
 - Empty dashed boxes are images not made yet; the box shows the size the game expects.
+- **from code**: images with no art file yet that the game draws itself from text in its code
+  (GameTest: `src/art/pixel_art.gd`, set as `code_art` in `assets.yaml`). That's what the player sees
+  today. Magenta parts are the player color. Once an art file exists, the page shows the file instead,
+  just like the game. **Only finished art files** hides the code art.
 - Animated sprites show all their frames together.
 - **Draw** (for `claude` assets): Claude writes each sprite as text in `art/<id>.yaml`. To get a new or
   changed sprite, ask Claude (e.g. "draw the bat"). If you edit the text file yourself, press

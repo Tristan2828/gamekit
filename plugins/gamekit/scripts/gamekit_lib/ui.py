@@ -26,14 +26,14 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import art, aseprite, audio, credits, manifest, music, packs, palette, pipeline, sfxr
+from . import art, aseprite, audio, codeart, credits, manifest, music, packs, palette, pipeline, sfxr
 
 PAGE = Path(__file__).resolve().parent.parent.parent / "ui" / "index.html"
 UPLOADS = Path(tempfile.gettempdir()) / "gamekit-uploads"
 DEFAULT_PORT = 7862          # Hearthtone uses 7861
 MAX_UPLOAD = 300 * 1024 * 1024
 KNOWN_ERRORS = (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
-                packs.PackError, audio.AudioError, music.MusicError, ValueError)
+                packs.PackError, audio.AudioError, music.MusicError, codeart.CodeArtError, ValueError)
 ACTION = threading.Lock()
 mimetypes.add_type("audio/ogg", ".ogg")
 mimetypes.add_type("audio/wav", ".wav")
@@ -60,6 +60,10 @@ def asset_json(loaded: manifest.Manifest, a: manifest.Asset) -> dict:
     src = loaded.source_path(a)
     exists = path.exists()
     is_image = path.suffix.lower() == ".png"
+    preview = f"/preview/{quote(a.id)}?v={int(path.stat().st_mtime)}" if exists and is_image else None
+    from_code = bool(is_image and not exists and codeart.has_art(loaded, a))
+    if from_code:  # no file yet: the game still draws it from its code, so show that
+        preview = f"/preview/{quote(a.id)}?v={int((loaded.root / loaded.code_art).stat().st_mtime)}"
     lic = a.license
     try:
         lic = manifest.effective_license(loaded, a) if a.license else {}
@@ -70,7 +74,7 @@ def asset_json(loaded: manifest.Manifest, a: manifest.Asset) -> dict:
         "size": a.size, "frames": a.frames if isinstance(a.frames, dict) else {}, "notes": a.notes,
         "replaces": a.replaces, "loop": loaded.loops(a), "exists": exists,
         "url": file_url(loaded.root, path) if exists and not is_image else None,
-        "preview": f"/preview/{quote(a.id)}?v={int(path.stat().st_mtime)}" if exists and is_image else None,
+        "preview": preview, "from_code": from_code,
         "src": src.relative_to(loaded.root).as_posix() if src is not None else None,
         "src_exists": bool(src and src.exists()),
         "license": lic,
@@ -96,6 +100,7 @@ def state(loaded: manifest.Manifest) -> dict:
         "sfx_peak_db": loaded.sfx_peak_db,
         "music_lufs": loaded.music_lufs,
         "has_render_script": bool(loaded.music.get("render_script")),
+        "code_art": loaded.code_art,
         "problems": manifest.validate(loaded, check_files=False),
         "assets": [asset_json(loaded, a) for a in loaded.assets],
     }
@@ -466,12 +471,14 @@ def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
 
         def _preview(self, asset_id: str) -> None:
             loaded = manifest.load(manifest_path)
-            items = pipeline.preview_items(loaded, [find(loaded, asset_id)])
-            if not items:
+            asset = find(loaded, asset_id)
+            items = pipeline.preview_items(loaded, [asset])
+            image = items[0][1] if items else codeart.render(loaded, asset)  # a file wins over code art
+            if image is None:
                 self._json(404, {"error": "no image yet"})
                 return
             buffer = io.BytesIO()
-            items[0][1].save(buffer, format="PNG")
+            image.save(buffer, format="PNG")
             self._send(200, buffer.getvalue(), "image/png")
 
         def do_POST(self) -> None:

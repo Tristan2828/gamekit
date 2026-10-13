@@ -72,6 +72,7 @@
   .thumb img { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; }
   .thumb.none { border: 2px dashed var(--line); background: none; color: var(--dim); font-size: 11px; text-align: center; }
   .pill { display: inline-block; padding: 0 9px; border-radius: 20px; font-size: 12px; border: 1px solid var(--line); color: var(--dim); font-weight: 400; }
+  .pill.code { border-color: var(--line); color: var(--dim); font-style: italic; }
   .pill.todo { color: var(--dim); } .pill.draft { border-color: var(--warn); color: var(--warn); } .pill.done { border-color: var(--good); color: var(--good); }
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; margin-top: 6px; }
   .seg button { border: 0; border-radius: 0; padding: 2px 11px; font-size: 12.5px; color: var(--dim); background: transparent; }
@@ -167,9 +168,11 @@
       <h2>Show</h2>
       <div class="row"><div><label for="aKind">Kind</label><select id="aKind"></select></div><div><label for="aStatus">Status</label><select id="aStatus"></select></div></div>
       <label for="aScale">Zoom <span id="aScaleText"></span></label><input type="range" id="aScale" min="1" max="8" value="4" style="width:100%;accent-color:var(--accent)">
-      <label class="check"><input type="checkbox" id="aMade"> Only images that exist</label>
+      <label class="check"><input type="checkbox" id="aMade"> Only images with art (files or code)</label>
+      <label class="check"><input type="checkbox" id="aFiles"> Only finished art files (hide code art)</label>
       <div class="buttons"><button id="checkArt">Check the images</button></div>
-      <div class="hint" style="margin-top:14px">Claude draws <b>claude</b> assets as text in <code>art/&lt;id&gt;.yaml</code>: ask it to draw or change one (the art-draw skill), then press <b>Draw</b> here after editing the text yourself. <b>Export</b> runs Aseprite for <b>self</b> assets.</div>
+      <div class="hint" id="codeHint" style="margin-top:14px"></div>
+      <div class="hint" style="margin-top:10px">Claude draws <b>claude</b> assets as text in <code>art/&lt;id&gt;.yaml</code>: ask it to draw or change one (the art-draw skill), then press <b>Draw</b> here after editing the text yourself. <b>Export</b> runs Aseprite for <b>self</b> assets.</div>
     </div>
   </section>
 
@@ -284,6 +287,7 @@ function fillFilters() {
 }
 const statusMatch = (a, f) => !f || (f === 'unfinished' ? a.status !== 'done' : a.status === f);
 const sizeText = a => Array.isArray(a.size) ? a.size.join('×') : '';
+const codePill = a => a.from_code ? ' <span class="pill code" title="No art file yet: this is how the game draws it from its code">from code</span>' : '';
 const framesText = a => Object.entries(a.frames || {}).map(([n, c]) => `${n} ${c}`).join(', ');
 
 function statusButtons(a) {
@@ -326,7 +330,7 @@ function renderAssets() {
     else if (a.url) thumb = `<div class="thumb none">${a.kind}</div>`;
     const lic = a.license && a.license.name ? ` · ${esc(a.license.name)} by ${esc(a.license.author || '?')}` : '';
     return `<div class="card"><div class="assetRow">${thumb}<div>
-      <h3>${esc(a.id)} <span class="pill ${a.status}">${a.status}</span></h3>
+      <h3>${esc(a.id)} <span class="pill ${a.status}">${a.status}</span>${codePill(a)}</h3>
       <div class="meta">${esc(a.kind)} · ${esc(a.source)}${sizeText(a) ? ' · ' + sizeText(a) : ''}${framesText(a) ? ' · ' + esc(framesText(a)) : ''} · ${esc(a.file)}${lic}</div>
       ${a.url ? `<audio controls preload="none" src="${a.url}"${a.loop ? ' loop' : ''}></audio>` : ''}
       ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ''}
@@ -435,8 +439,10 @@ function renderArt() {
   $('aScaleText').textContent = scale + '×';
   const kind = $('aKind').value, status = $('aStatus').value, made = $('aMade').checked;
   const images = S.assets.filter(a => ['sprite', 'tileset', 'icon', 'ui', 'font'].includes(a.kind) && (!kind || a.kind === kind) &&
-    statusMatch(a, status) && (!made || a.preview));
+    statusMatch(a, status) && (!made || a.preview) && (!$('aFiles').checked || (a.preview && !a.from_code)));
   $('artTitle').textContent = `Images (${images.length})`;
+  $('codeHint').innerHTML = S.code_art ? `<b>from code</b>: no art file yet, so this is the game's own drawing from <code>${esc(S.code_art)}</code> (magenta = player color). A file replaces it.` :
+    'Art the game draws in code? Set <code>code_art</code> in assets.yaml to show it here.';
   $('gallery').innerHTML = images.length ? images.map(a => {
     const w = Array.isArray(a.size) ? a.size[0] * scale : 32, h = Array.isArray(a.size) ? a.size[1] * scale : 32;
     const pic = a.preview ? `<div class="pic"><img src="${a.preview}" alt="${esc(a.id)}" onload="this.style.width=(this.naturalWidth*${scale})+'px'"></div>`
@@ -444,8 +450,8 @@ function renderArt() {
     const buttons = [];
     if (a.source === 'claude' && a.src_exists) buttons.push(`<button data-draw="${esc(a.id)}" title="Render ${esc(a.src)} to PNG">Draw</button>`);
     if (a.source === 'self' && a.src_exists) buttons.push(`<button data-export="${esc(a.id)}" title="Export ${esc(a.src)} with Aseprite">Export</button>`);
-    if (a.preview) buttons.push(`<button data-check="${esc(a.id)}">Check</button>`);
-    return `<div class="tile">${pic}<b>${esc(a.id)}</b>
+    if (a.preview && !a.from_code) buttons.push(`<button data-check="${esc(a.id)}">Check</button>`);
+    return `<div class="tile">${pic}<b>${esc(a.id)}${codePill(a)}</b>
       <div class="meta">${esc(a.kind)} · ${esc(a.source)}${sizeText(a) ? ' · ' + sizeText(a) : ''}${framesText(a) ? '<br>' + esc(framesText(a)) : ''}</div>
       ${statusButtons(a)}<div class="buttons">${buttons.join('')}</div></div>`;
   }).join('') : '<div class="empty">Nothing matches.</div>';
@@ -456,8 +462,9 @@ function renderArt() {
 for (const id of ['aKind', 'aStatus']) $(id).onchange = () => { store.set(id, $(id).value); renderArt(); };
 $('aScale').oninput = () => { store.set('aScale', $('aScale').value); renderArt(); };
 $('aMade').onchange = () => renderArt();
+$('aFiles').onchange = () => renderArt();
 $('checkArt').onclick = () => {
-  const ids = S.assets.filter(a => a.preview).map(a => a.id);
+  const ids = S.assets.filter(a => a.preview && !a.from_code).map(a => a.id);
   if (ids.length) api('/api/check', { ids }); else showStatus('No images made yet.');
 };
 
