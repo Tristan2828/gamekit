@@ -242,9 +242,20 @@ Pictures from a description (FLUX.2 klein), on your graphics card.
    **Seed**: leave empty for new versions.
 4. **Make it**. Click any picture to see it full size.
 
-**Work from this** starts the next pictures from that one. Use it for **animation frames**: make the base pose,
-press **Work from this**, then a pose button (**walk 1**, **walk 2**, **attack**, **wings up**...) and **Make it**.
-The new picture keeps the creature's look and changes only the pose.
+**Work from this** starts the next pictures from that one: the new picture keeps the creature's look, and the words
+say only what changes (a pose button: **walk 1**, **walk 2**, **attack**, **wings up**...).
+
+**Animate…** turns a picture into a whole animation for an animated sprite:
+1. Press **Animate…** under the picture. A panel opens at the top with one box per frame of the asset (e.g.
+   `shambler`, `shambler_walk_1`, `shambler_walk_2`). The first frame uses your picture (its cut-out if it has one).
+2. Empty frames show the words they'll be made from ("...walking, left foot forward"). Change them if you like,
+   then press **Make the missing frames**. Each one is made from your picture, then cut out (about 30 s each,
+   plus loading the model the first time).
+3. The players at the bottom **play each animation** (idle, walk, attack) zoomed in and at real size. Use the
+   **Speed** slider. Don't like a frame? Pick another picture in its box, or choose "(none yet: make it)" and make
+   it again.
+4. **Use all frames** saves every frame file at once. They're all shrunk with **the same crop**, so the creature
+   stays in place and keeps its size from frame to frame (shrinking them one at a time would make it jitter).
 
 **Cut out** makes a copy of a picture with the background made transparent by a second AI model (BiRefNet),
 shown on a checkerboard and marked "cut-out". It keeps soft edges and the gaps between arms and body, which the

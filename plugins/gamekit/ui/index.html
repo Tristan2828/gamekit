@@ -117,6 +117,20 @@
   .use.open { display: block; }
   .use select { padding: 5px 8px; font-size: 13px; }
   .use .check { font-size: 13px; margin-top: 6px; }
+  #animPanel { display: none; margin-bottom: 18px; padding: 14px; border: 1px solid var(--accent); border-radius: 10px; }
+  #animPanel.open { display: block; }
+  #animPanel .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 10px 0; }
+  #animPanel .slot { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  #animPanel .slot b { font-size: 12.5px; }
+  #animPanel .slot img.thumb { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px; margin-top: 6px;
+    background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 12px 12px; }
+  #animPanel .slot select { width: 100%; font-size: 12.5px; padding: 4px 6px; margin-top: 6px; }
+  #animPanel .slot textarea { min-height: 70px; font-size: 12px; margin-top: 6px; }
+  #animPanel .players { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin: 10px 0; }
+  #animPanel .player { text-align: center; font-size: 12px; color: var(--dim); }
+  #animPanel .player img { image-rendering: pixelated; display: block; margin: 0 auto 4px;
+    background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
+  #animPanel .player img.real { background: #14110f; margin-top: 6px; }
   .use .preview { display: flex; gap: 10px; align-items: flex-end; margin-top: 8px; min-height: 40px; }
   .use .preview img { image-rendering: pixelated; background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
   #bigPic { display: none; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.85); align-items: center; justify-content: center; cursor: zoom-out; }
@@ -332,7 +346,7 @@
     <div class="tab sounds"><h2 id="aiSoundTitle">AI sounds</h2><div id="aiSoundList"></div><h2 class="gap">Retro takes (sfxr) <button id="clearTakes" style="float:right;font-size:12px;text-transform:none;letter-spacing:0">Clear takes</button></h2><div id="takeList"></div></div>
     <div class="tab music"><h2 id="takeTitle">AI takes</h2><div id="musicTakes"></div><h2 class="gap">Every track</h2><div id="musicList"></div></div>
     <div class="tab art"><h2 id="artTitle">Images</h2><div class="gallery" id="gallery"></div></div>
-    <div class="tab pictures"><h2 id="picTitle">Pictures</h2><div class="pics" id="picList"></div></div>
+    <div class="tab pictures"><div id="animPanel"></div><h2 id="picTitle">Pictures</h2><div class="pics" id="picList"></div></div>
     <div class="tab models wip-panel"><h2>Models</h2><div class="ghost"><div class="empty">Your 3D models will show here, each with the pictures it was made from.</div></div></div>
     <div class="tab voices"><h2 id="voiceTitle">Readings</h2><div id="voiceList"></div></div>
   </section>
@@ -761,6 +775,7 @@ async function renderPictures() {
         <button data-from="${esc(p.name)}" title="Make the next pictures from this one (e.g. 'the same character from behind')">Work from this</button>
         ${m.cutout_of ? '' : `<button data-cut="${esc(p.name)}" title="${cutReady ? 'A copy with the background made transparent (AI, about 10 s)' : 'Sets up the cut-out engine first (about 300 MB, once)'}">${cutReady ? 'Cut out' : 'Cut out (set up)'}</button>`}
         <button data-useopen="${esc(p.name)}">Use as asset…</button>
+        <button data-animate="${esc(p.name)}" title="Make this picture's creature into an animation: one picture per frame, played back before saving">Animate…</button>
         <button data-premove="${esc(p.name)}" title="Moves it to pictures/_removed">Remove</button>
       </div>
       <div class="use" id="use-${esc(p.name)}" data-for="${esc(m.for || '')}">
@@ -801,6 +816,8 @@ async function renderPictures() {
     renderPictures();
     $('pPrompt').focus();
   });
+  $('picList').querySelectorAll('[data-animate]').forEach(b => b.onclick = () => openAnimation(b.dataset.animate));
+  renderAnimation();
   $('picList').querySelectorAll('[data-cut]').forEach(b => b.onclick = () =>
     cutReady ? startJob('/api/pictures/cutout', { name: b.dataset.cut }) : startJob('/api/engines/setup', { name: 'cutout' }));
   const useSettings = (box, name) => ({ name, id: box.querySelector('.asset').value, frame: box.querySelector('.frame').value,
@@ -846,6 +863,136 @@ $('makePictures').onclick = () => {
   startJob('/api/pictures/make', { prompt: $('pPrompt').value, width, height, takes: +$('pTakes').value || 1,
     tile: $('pTile').checked, seed: $('pSeed').value, refs, for: $('pFor').value });
 };
+
+// ---------- Pictures tab: animation ----------
+// anim = {id, base, slots: {frame: picture}, poses: {frame: words}} while the panel is open
+let anim = null, animTimer = null, animFrames = {};
+const animatedAssets = () => imageAssets().filter(a => a.targets.length > 1);
+const pictureMeta = name => ((picCache || []).find(p => p.name === name) || {}).meta || {};
+
+function openAnimation(name) {
+  const m = pictureMeta(name), assets = animatedAssets();
+  const id = assets.some(a => a.id === m.for) ? m.for : (assets[0] || {}).id;
+  if (!id) { showStatus('No animated sprites in assets.yaml (they need frames: and frame_files: true).', false, true); return; }
+  anim = { id, base: name, slots: {}, poses: {} };
+  pickAnimationAsset(id);
+  $('animPanel').scrollIntoView({ behavior: 'smooth' });
+}
+
+// a cut-out of a picture if there is one (newest), else the picture
+function preferCutout(name) {
+  const cut = (picCache || []).find(p => p.meta && p.meta.cutout_of === name);
+  return cut ? cut.name : name;
+}
+
+function pickAnimationAsset(id) {
+  const a = S.assets.find(x => x.id === id);
+  anim.id = id;
+  anim.slots = {};
+  anim.poses = { ...(a.poses || {}) };
+  a.targets.forEach((t, i) => {
+    // the newest picture made for this frame (cut-outs first), and the picture you started from for the first
+    const made = (picCache || []).filter(p => p.meta && p.meta.for === id && p.meta.frame === t)
+      .sort((x, y) => (y.meta.cutout_of ? 1 : 0) - (x.meta.cutout_of ? 1 : 0));
+    anim.slots[t] = made.length ? made[0].name : i === 0 ? preferCutout(anim.base) : '';
+  });
+  renderAnimation(true);
+}
+
+function renderAnimation(changed) {
+  const panel = $('animPanel');
+  if (!anim) { panel.classList.remove('open'); return; }
+  const a = S.assets.find(x => x.id === anim.id);
+  if (!a) { anim = null; panel.classList.remove('open'); return; }
+  // fill frames that are still empty with pictures made for them since (e.g. by Make the missing frames)
+  a.targets.forEach(t => {
+    if (anim.slots[t]) return;
+    const made = (picCache || []).filter(p => p.meta && p.meta.for === anim.id && p.meta.frame === t)
+      .sort((x, y) => (y.meta.cutout_of ? 1 : 0) - (x.meta.cutout_of ? 1 : 0));
+    if (made.length) { anim.slots[t] = made[0].name; changed = true; }
+  });
+  const pics = picCache || [];
+  const options = slot => option('', '(none yet: make it)', !anim.slots[slot]) + pics.map(p =>
+    option(p.name, `${p.name}${p.meta && p.meta.cutout_of ? ' (cut-out)' : ''}`, p.name === anim.slots[slot])).join('');
+  const missing = a.targets.filter(t => !anim.slots[t]);
+  const keep = {};
+  panel.querySelectorAll('input[type=checkbox]').forEach(c => keep[c.className] = c.checked);
+  panel.innerHTML = `
+    <h2 style="margin-top:0">Animate <select id="animAsset" style="width:auto;display:inline-block;margin-left:6px">${animatedAssets().map(x =>
+      option(x.id, `${x.id} (${x.size.join('×')}, ${Object.entries(x.frames).map(([n, c]) => n + ' ' + c).join(', ')})`, x.id === anim.id)).join('')}</select>
+      <button id="animClose" style="float:right;font-size:12px">Close</button></h2>
+    <div class="hint">One picture per frame. Empty frames are made from <b>${esc(anim.slots[a.targets[0]] || anim.base)}</b> with the words under them
+      (edit them first if you like), then cut out. All frames are shrunk with the same crop, so the creature doesn't jump around.</div>
+    <div class="slots">${a.targets.map(t => `<div class="slot">
+      <b>${esc(t)}</b>
+      <select data-slot="${esc(t)}">${options(t)}</select>
+      ${anim.slots[t] ? `<img class="thumb" src="${esc((pics.find(p => p.name === anim.slots[t]) || {}).url || '')}" alt="">`
+        : `<textarea data-pose="${esc(t)}">${esc(anim.poses[t] || '')}</textarea>`}
+    </div>`).join('')}</div>
+    <div class="buttons">
+      <button class="primary" id="animMake" style="width:auto" ${missing.length ? '' : 'disabled'}>Make the missing frames${missing.length ? ` (${missing.length})` : ''}</button>
+      <button id="animUse" ${missing.length === a.targets.length ? 'disabled' : ''}>Use all frames</button>
+    </div>
+    <label class="check"><input type="checkbox" class="bg" checked> Remove the background</label>
+    <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette</label>
+    ${S.sprites && S.sprites.outline ? `<label class="check"><input type="checkbox" class="outline" checked> 1 px outline ${esc(S.sprites.outline)}</label>` : ''}
+    <label for="animFps">Speed <span id="animFpsText"></span></label>
+    <input type="range" id="animFps" min="1" max="12" value="${store.get('animFps', '5')}" style="width:220px;accent-color:var(--accent)">
+    <div class="players" id="animPlayers"></div>`;
+  panel.classList.add('open');
+  panel.querySelectorAll('input[type=checkbox]').forEach(c => { if (c.className in keep) c.checked = keep[c.className]; });
+  $('animFpsText').textContent = `${$('animFps').value} frames a second`;
+  $('animAsset').onchange = () => pickAnimationAsset($('animAsset').value);
+  $('animClose').onclick = () => { anim = null; clearInterval(animTimer); renderAnimation(); };
+  panel.querySelectorAll('[data-slot]').forEach(sel => sel.onchange = () => { anim.slots[sel.dataset.slot] = sel.value; renderAnimation(true); });
+  panel.querySelectorAll('[data-pose]').forEach(box => box.oninput = () => { anim.poses[box.dataset.pose] = box.value; });
+  panel.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = previewAnimation);
+  $('animFps').oninput = () => { store.set('animFps', $('animFps').value); $('animFpsText').textContent = `${$('animFps').value} frames a second`; playAnimation(); };
+  $('animMake').onclick = () => {
+    const poses = {};
+    a.targets.filter(t => !anim.slots[t]).forEach(t => poses[t] = anim.poses[t] || '');
+    startJob('/api/pictures/frames', { id: anim.id, name: anim.slots[a.targets[0]] || anim.base, poses });
+  };
+  $('animUse').onclick = async () => {
+    const done = await api('/api/pictures/animation/use', animSettings());
+    if (done) load();
+  };
+  if (changed || !Object.keys(animFrames).length) previewAnimation(); else playAnimation();
+}
+
+function animSettings() {
+  const panel = $('animPanel'), box = c => panel.querySelector('.' + c);
+  const frames = {};
+  Object.entries(anim.slots).forEach(([t, name]) => { if (name) frames[t] = name; });
+  return { id: anim.id, frames, background: box('bg').checked, snap: box('snap').checked, outline: box('outline') ? box('outline').checked : false };
+}
+
+async function previewAnimation() {
+  const settings = animSettings();
+  const data = Object.keys(settings.frames).length ? await api('/api/pictures/animation', settings, true) : null;
+  animFrames = data ? { ...data.frames, _size: [data.width, data.height] } : {};  // swapped in whole: no half-loaded frames
+  playAnimation();
+}
+
+// one player per animation (idle, walk, attack...), cycling through the frames that have a picture
+function playAnimation() {
+  clearInterval(animTimer);
+  const a = anim && S.assets.find(x => x.id === anim.id), players = $('animPlayers');
+  if (!a || !players) return;
+  const [w, h] = animFrames._size || a.size, zoom = Math.max(2, Math.floor(120 / Math.max(w, h)));
+  const groups = Object.entries(a.animations || {}).map(([name, frames]) => [name, frames.filter(f => animFrames[f])]).filter(([, f]) => f.length);
+  players.innerHTML = groups.length ? groups.map(([name, frames]) => `<div class="player">
+      <img data-play="${esc(name)}" width="${w * zoom}" height="${h * zoom}" alt=""><img class="real" data-play="${esc(name)}" width="${w}" height="${h}" alt="">
+      ${esc(name)} (${frames.length} frame${frames.length > 1 ? 's' : ''})</div>`).join('')
+    : '<div class="hint">Choose or make pictures for the frames to see them move.</div>';
+  let tick = 0;
+  const show = () => {
+    groups.forEach(([name, frames]) => players.querySelectorAll(`[data-play="${name}"]`).forEach(img => img.src = animFrames[frames[tick % frames.length]]));
+    tick++;
+  };
+  show();
+  animTimer = setInterval(show, 1000 / (+$('animFps').value || 5));
+}
 
 // ---------- Music tab: AI takes ----------
 const MOODS = {

@@ -13,6 +13,7 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines setup picture      # o
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture "<description>" [--takes 2] [--size 1024x1024] [--tile] [--seed N] [--from <picture.png>] [--for <asset-id>]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines setup cutout       # small (~300 MB, no PyTorch); fine to run
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-cutout <picture.png> [more.png...]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-frames <asset-id> <frame>=<picture.png> [...]   # a whole animation, one crop
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-use <picture.png> <asset-id> [--frame <name>_walk_1] [--keep-background] [--no-palette] [--no-outline] [--force]
 ```
 
@@ -61,9 +62,14 @@ survive. It sets the asset's `source: ai` (and `todo` -> `draft`).
   then the `sprites.prompt` words, "plain white background, whole body in view" and the look (the asset's
   `notes`). Chunky, chibi proportions with big eyes survive shrinking far better than realistic ones. Pass
   `--for <asset-id>` so the files are named after the asset.
-- Animated sprites (manifest `frame_files: true`): one picture per frame. Make the base pose, then
-  `--from <base.png>` with only the pose ("the same creature, same colors and style, walking, left foot
-  forward"), and `picture-use ... --frame shambler_walk_1`. Sheets (no frame_files): draw with `art-draw`.
+- Animated sprites (manifest `frame_files: true`): one picture per frame. The user's easiest way is
+  **Animate…** on the Pictures tab: it makes the missing frames from one picture, plays them, and saves them all
+  with one shared crop (no jitter). From the CLI: make the base pose, then `--from <base.png>` with only the pose
+  ("the same creature, same colors, same size and same place in the picture, plain white background: walking,
+  left foot forward"), cut out, and save them together with `picture-frames shambler shambler=base-cutout.png
+  shambler_walk_1=... shambler_walk_2=...` (one shared crop). `picture-use --frame` crops each frame on its
+  own and can make an animation jitter: use it only to replace a single frame.
+  Sheets (no frame_files): draw with `art-draw`.
 - Run `picture-cutout` before using a picture as a sprite.
 - Expect: 18 px and up usable drafts; 10 to 14 px readable blobs; smaller or very wide (14x8) loses the face.
   For those, **redraw instead**: look at the picture (Read the PNG) and draw the sprite with the `art-draw`

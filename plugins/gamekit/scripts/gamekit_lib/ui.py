@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from PIL import Image
+
 from . import (art, aseprite, audio, codeart, credits, engines, made, manifest, music, packs, palette,
                pictures, pipeline, sfxr)
 
@@ -91,7 +93,18 @@ def asset_json(loaded: manifest.Manifest, a: manifest.Asset) -> dict:
         "src_exists": bool(src and src.exists()),
         "license": lic,
         "targets": pictures.frame_targets(loaded, a) if is_image else [],
+        "poses": {t: pictures.pose(loaded, a, t) for t in pictures.frame_targets(loaded, a)}
+                 if is_image and loaded.frame_paths(a) else {},
+        "animations": _animations(loaded, a) if is_image else {},
     }
+
+
+def _animations(loaded: manifest.Manifest, a: manifest.Asset) -> dict[str, list[str]]:
+    """Animation name -> its frame files' names, in order (frame_files sprites only)."""
+    out: dict[str, list[str]] = {}
+    for anim, _, path in loaded.frame_paths(a):
+        out.setdefault(anim, []).append(path.stem)
+    return out
 
 
 def state(loaded: manifest.Manifest) -> dict:
@@ -542,6 +555,89 @@ def do_make_pictures(loaded: manifest.Manifest, body: dict) -> dict:
     return {"message": ""}
 
 
+def _chosen_frames(body: dict) -> dict[str, str]:
+    frames = body.get("frames") or {}
+    if not isinstance(frames, dict):
+        raise UserError("frames: {frame: picture}")
+    return {str(k): str(v) for k, v in frames.items() if v}
+
+
+def do_make_frames(loaded: manifest.Manifest, body: dict) -> dict:
+    """Pictures for an asset's missing frames, each made from one base picture with its own pose words, then cut
+    out (if the cut-out engine is set up)."""
+    a = find(loaded, str(body.get("id", "")))
+    base = pictures.path_of(loaded, str(body.get("name", "")))
+    base_meta = pictures.read_meta(base)
+    if base_meta.get("cutout_of"):  # the picture model reads colors, not transparency: work from the original
+        base = pictures.path_of(loaded, base_meta["cutout_of"])
+        base_meta = pictures.read_meta(base)
+    poses = {str(k): str(v).strip() for k, v in (body.get("poses") or {}).items() if str(v).strip()}
+    targets = pictures.frame_targets(loaded, a)
+    if not poses:
+        raise UserError("no frames to make: every frame has a picture already")
+    if any(frame not in targets for frame in poses):
+        raise UserError(f"{a.id} has frames: {', '.join(targets)}")
+    if not engines.is_installed(engines.get("picture")):
+        raise UserError("the picture engine isn't set up yet: press Set up on the Pictures tab")
+    cut = engines.is_installed(engines.get("cutout"))
+    with Image.open(base) as image:
+        width, height = image.size
+
+    def work(job: Job) -> dict:
+        made = {}
+        for n, (frame, words) in enumerate(poses.items()):
+            if job.cancel:
+                break
+            label = f"frame {n + 1} of {len(poses)} ({frame}): "
+
+            def on_step(text: str) -> None:
+                job.step = label + text
+
+            seed = random.randrange(1, 2**31 - 1)
+            out = pictures.new_path(loaded, frame, seed)
+            request = {"prompt": words, "width": width, "height": height, "steps": int(base_meta.get("steps") or 4),
+                       "tile": False, "refs": [str(base)], "for": a.id, "frame": frame}
+            answer = engines.worker("picture").ask(request | {"out": str(out), "seed": seed}, on_step)
+            meta = pictures.record(out, request, answer)
+            made_name = out.name
+            if cut:
+                cut_out = pictures.cutout_path(loaded, out.name)
+                engines.worker("cutout").ask({"in": str(out), "out": str(cut_out)}, on_step)
+                pictures.record_cutout(cut_out, out.name, meta)
+                made_name = cut_out.name
+            made[frame] = made_name
+        return {"made": list(made.values()), "frames": made,
+                "message": f"made {len(made)} frame{'s' if len(made) != 1 else ''} for {a.id}"}
+
+    start_job("Frames", work)
+    return {"message": ""}
+
+
+def do_animation_preview(loaded: manifest.Manifest, body: dict) -> dict:
+    """The frames as Use all frames would save them (one shared crop), as PNG data URLs; nothing saved."""
+    a = find(loaded, str(body.get("id", "")))
+    sprites = pictures.make_frames(loaded, a, _chosen_frames(body), background=bool(body.get("background", True)),
+                                   snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)))
+    frames = {}
+    for frame, sprite in sprites.items():
+        buffer = io.BytesIO()
+        sprite.save(buffer, "PNG")
+        frames[frame] = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+    return {"frames": frames, "width": a.size[0], "height": a.size[1]}
+
+
+def do_animation_use(loaded: manifest.Manifest, body: dict) -> dict:
+    a = find(loaded, str(body.get("id", "")))
+    chosen = _chosen_frames(body)
+    paths = {path.stem: path for _, _, path in loaded.frame_paths(a)}
+    if any(paths.get(frame) and paths[frame].exists() for frame in chosen):
+        _overwrite_guard(next(paths[f] for f in chosen if paths.get(f) and paths[f].exists()), body)
+    problems = pictures.use_frames(loaded, a, chosen, background=bool(body.get("background", True)),
+                                   snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)))
+    manifest.set_fields(loaded.path, a.id, {"source": "ai"} | ({"status": "draft"} if a.status == "todo" else {}))
+    return {"problems": problems, "message": f"{a.id}: saved {len(chosen)} frame{'s' if len(chosen) != 1 else ''} (source: ai)"}
+
+
 def do_cutout_picture(loaded: manifest.Manifest, body: dict) -> dict:
     """A copy of a picture with its background made transparent (cut-out engine, on the processor)."""
     name = str(body.get("name", ""))
@@ -770,6 +866,8 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
     "/api/pictures": do_pictures, "/api/pictures/make": do_make_pictures, "/api/pictures/keep": do_keep_picture,
     "/api/pictures/remove": do_remove_picture,
     "/api/pictures/preview": do_preview_picture,
+    "/api/pictures/frames": do_make_frames, "/api/pictures/animation": do_animation_preview,
+    "/api/pictures/animation/use": do_animation_use,
     "/api/pictures/cutout": do_cutout_picture, "/api/pictures/use": do_use_picture,
     "/api/status": do_status, "/api/validate": do_validate, "/api/check": do_check, "/api/credits": do_credits,
     "/api/open-folder": do_open_folder, "/api/info": do_info,
@@ -782,7 +880,7 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
 READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate", "/api/job", "/api/cancel", "/api/pictures",
              "/api/engines/setup", "/api/pictures/make", "/api/musictakes", "/api/musictakes/make", "/api/takes",
              "/api/sounds/make", "/api/voices/make", "/api/pictures/cutout",
-             "/api/pictures/preview"}
+             "/api/pictures/preview", "/api/pictures/frames", "/api/pictures/animation"}
 
 
 # --- the server ------------------------------------------------------------------------------------

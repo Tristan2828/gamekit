@@ -167,6 +167,13 @@ def main(argv: list[str] | None = None) -> int:
     pic_use.add_argument("--frame", default="", help="with frame_files: which frame file, e.g. ghoul_walk_1")
     pic_use.add_argument("--force", action="store_true", help="replace an existing asset file")
 
+    pic_frames = commands.add_parser("picture-frames", help="pictures as an animated sprite's frame files, with one shared crop")
+    pic_frames.add_argument("asset", help="asset id (frame_files sprite)")
+    pic_frames.add_argument("frames", nargs="+", help="<frame>=<picture>, e.g. ghoul_walk_1=ghoul-walk-1-5-cutout.png")
+    pic_frames.add_argument("--keep-background", action="store_true", help="don't remove the background")
+    pic_frames.add_argument("--no-palette", action="store_true", help="don't snap colors to the palette")
+    pic_frames.add_argument("--no-outline", action="store_true", help="no outline, even if the manifest's sprites: sets one")
+
     snd = commands.add_parser("sound", help="make sound effects from a description (sound engine) into sound-takes/")
     snd.add_argument("prompt", help="e.g. \"a heavy wooden door slams shut in a stone hall\"")
     snd.add_argument("--seconds", type=float, default=2.0, help="length (default 2)")
@@ -199,7 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
                 "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
                 "sfx": _sfx, "music": _music, "ui": _ui, "engines": _engines, "picture": _picture,
-                "picture-cutout": _picture_cutout, "picture-use": _picture_use, "sound": _sound, "voice": _voice,
+                "picture-cutout": _picture_cutout, "picture-use": _picture_use,
+                "picture-frames": _picture_frames, "sound": _sound, "voice": _voice,
                 "take-use": _take_use}
     try:
         return handlers[args.command](args)
@@ -760,6 +768,24 @@ def _picture_cutout(args: argparse.Namespace) -> int:
             print(f"wrote {out.relative_to(loaded.root).as_posix()}", flush=True)
     finally:
         worker.stop()
+    return 0
+
+
+def _picture_frames(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    asset = _asset(loaded, args.asset)
+    chosen = {}
+    for item in args.frames:
+        frame, _, name = item.partition("=")
+        if not name:
+            raise pictures.PictureError(f"{item!r}: write <frame>=<picture>, e.g. {asset.id}_walk_1=walk.png")
+        chosen[frame] = name
+    problems = pictures.use_frames(loaded, asset, chosen, background=not args.keep_background,
+                                   snap=not args.no_palette, outline=not args.no_outline)
+    manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
+    print(f"{asset.id}: wrote {', '.join(chosen)} (one shared crop; source: ai)")
+    for problem in problems:
+        print(f"  - {problem}")
     return 0
 
 

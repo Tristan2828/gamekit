@@ -42,7 +42,7 @@ def record(path: Path, request: dict, answer: dict) -> dict:
                               "width": answer.get("width"), "height": answer.get("height"),
                               "steps": request.get("steps"), "tile": bool(request.get("tile")),
                               "refs": [Path(r).name for r in request.get("refs", [])], "model": "FLUX.2 klein 4B",
-                              "for": request.get("for", "")})
+                              "for": request.get("for", ""), "frame": request.get("frame", "")})
 
 
 def cutout_path(manifest: Manifest, name: str) -> Path:
@@ -94,23 +94,30 @@ def remove_background(image: Image.Image, tolerance: int = 48) -> Image.Image:
     return out
 
 
+def cut_background(image: Image.Image, background: bool = True) -> Image.Image:
+    """The picture with a transparent background: a cut-out keeps its own, else (if asked) a flood fill."""
+    return remove_background(image) if background and not has_transparency(image) else image.convert("RGBA")
+
+
 def has_transparency(image: Image.Image) -> bool:
     return image.mode in ("RGBA", "LA") and image.getchannel("A").getextrema()[0] < 255
 
 
 def to_sprite(image: Image.Image, size: tuple[int, int], colors: list[Color] | None = None,
-              background: bool = True, outline: Color | None = None) -> Image.Image:
+              background: bool = True, outline: Color | None = None,
+              box: tuple[int, int, int, int] | None = None) -> Image.Image:
     """A big picture as a small pixel art sprite: background removed, cropped to the subject, shrunk to fit
     `size` (centered, bottom-aligned so it stands on the ground), hard-edged, and snapped to `colors`.
     A picture that already has a transparent background (a cut-out) keeps it. With `outline`, the subject is
-    shrunk 2 px smaller and gets a 1 px outline of that color, still inside `size`."""
+    shrunk 2 px smaller and gets a 1 px outline of that color, still inside `size`. `box` crops to that part
+    of the picture instead of the subject's own edges: animation frames share one, so they line up."""
     if outline:
-        inner = to_sprite(image, (max(1, size[0] - 2), max(1, size[1] - 2)), colors, background)
+        inner = to_sprite(image, (max(1, size[0] - 2), max(1, size[1] - 2)), colors, background, box=box)
         sprite = Image.new("RGBA", size, (0, 0, 0, 0))
         sprite.paste(inner, (1, 1))
         return add_outline(sprite, outline)
-    image = remove_background(image) if background and not has_transparency(image) else image.convert("RGBA")
-    box = image.getchannel("A").getbbox()
+    image = cut_background(image, background)
+    box = box or image.getchannel("A").getbbox()
     if box is None:
         raise PictureError("the whole picture is background: try without removing the background")
     subject = image.crop(box)
@@ -257,3 +264,66 @@ def use_as_asset(manifest: Manifest, asset: Asset, name: str, background: bool =
     else:
         pipeline.save_image(manifest, asset, sprite, None)
     return pipeline.check(manifest, asset, [e.color for e in pipeline.palette_entries(manifest)])
+
+
+# --- animation: frames that share one crop, so they don't jitter ----------------------------------
+
+def make_frames(manifest: Manifest, asset: Asset, chosen: dict[str, str], background: bool = True,
+                snap: bool = True, outline: bool = True) -> dict[str, Image.Image]:
+    """Several pictures as an asset's frames ({frame file name: picture name} -> {frame: sprite}). They are
+    cropped to one box around all their subjects and shrunk by the same amount, so the creature stays put and
+    keeps its size from frame to frame. Not saved."""
+    if not (isinstance(asset.size, list) and len(asset.size) == 2):
+        raise PictureError(f"{asset.id} has no pixel size in the manifest")
+    targets = frame_targets(manifest, asset)
+    unknown = [frame for frame in chosen if frame not in targets]
+    if unknown:
+        raise PictureError(f"{asset.id} has no frame {unknown[0]!r}; there are: {', '.join(targets)}")
+    if not chosen:
+        raise PictureError("choose a picture for at least one frame")
+    images = {}
+    for frame, name in chosen.items():
+        with Image.open(path_of(manifest, name)) as picture:
+            images[frame] = cut_background(picture, background)
+    sizes = {image.size for image in images.values()}
+    if len(sizes) > 1:
+        raise PictureError("the frames' pictures have different sizes: make them all from one picture "
+                           "(Work from this, or Make the missing frames)")
+    boxes = [image.getchannel("A").getbbox() for image in images.values()]
+    if any(b is None for b in boxes):
+        raise PictureError("one of the pictures is all background: try without removing the background")
+    box = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+    colors = sprite_colors(manifest) if snap else None
+    line = manifest.sprites.get("outline") if outline else None
+    size = (asset.size[0], asset.size[1])
+    return {frame: to_sprite(image, size, colors, False, palette.parse_hex(line) if line else None, box)
+            for frame, image in images.items()}
+
+
+def use_frames(manifest: Manifest, asset: Asset, chosen: dict[str, str], background: bool = True,
+               snap: bool = True, outline: bool = True) -> list[str]:
+    """Saves make_frames' sprites as the asset's frame files; returns check problems."""
+    paths = {path.stem: path for _, _, path in manifest.frame_paths(asset)}
+    if not paths:
+        raise PictureError(f"{asset.id} isn't animated with frame files (frame_files: true and frames: in assets.yaml)")
+    for frame, sprite in make_frames(manifest, asset, chosen, background, snap, outline).items():
+        paths[frame].parent.mkdir(parents=True, exist_ok=True)
+        sprite.save(paths[frame])
+    return pipeline.check(manifest, asset, [e.color for e in pipeline.palette_entries(manifest)])
+
+
+def pose(manifest: Manifest, asset: Asset, frame: str) -> str:
+    """A starting description for one frame made from the base picture: what changes in that frame."""
+    anim, index = next(((a, i) for a, i, path in manifest.frame_paths(asset) if path.stem == frame), ("idle", 0))
+    count = asset.frames.get(anim, 1) if isinstance(asset.frames, dict) else 1
+    if anim == "walk":
+        steps = ["walking, left foot forward", "walking, right foot forward", "walking, feet together, body raised"]
+        what = steps[index % len(steps)] if count > 1 else "walking, mid-stride"
+    elif anim == "attack":
+        what = "attacking, lunging forward"
+    elif anim == "idle":
+        what = ("the same pose with one small change: breathing in, wings or arms raised, or flames flickering "
+                "higher") if index else "standing still, the main pose"
+    else:
+        what = f"{anim.replace('_', ' ')}, frame {index + 1} of {count}"
+    return f"the same creature, same colors, same size and same place in the picture, plain white background: {what}"

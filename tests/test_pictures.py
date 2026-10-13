@@ -404,5 +404,97 @@ class SpriteRulesTests(unittest.TestCase):
             server.server_close()
 
 
+class AnimationTests(FakeWorkerMixin, unittest.TestCase):
+    """Frames from several pictures share one crop; the page makes missing frames and saves them all."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "assets.yaml").write_text(RULES_MANIFEST, encoding="utf-8")
+        (self.root / "palette.hex").write_text("17121c\nc83c3c\n902020\nffffff\n", encoding="utf-8")
+        (self.root / "pictures").mkdir()
+        for name, top in (("ghoul-1.png", 20), ("ghoul-2.png", 0)):  # the second one jumps 20 px up
+            image = Image.new("RGB", (200, 200), "white")
+            ImageDraw.Draw(image).rectangle([60, top, 139, top + 159], fill=(200, 60, 60))
+            image.save(self.root / "pictures" / name)
+        self.m = manifest.load(self.root / "assets.yaml")
+        self.ghoul = self.m.assets[0]
+
+    def tearDown(self) -> None:
+        ui.CURRENT["job"] = None
+        self._tmp.cleanup()
+
+    def test_frames_share_one_crop(self) -> None:
+        frames = pictures.make_frames(self.m, self.ghoul, {"ghoul": "ghoul-1.png", "ghoul_walk_1": "ghoul-2.png"},
+                                      outline=False)
+        low, high = (frames[f].getchannel("A").getbbox() for f in ("ghoul", "ghoul_walk_1"))
+        self.assertEqual((low[2] - low[0], low[3] - low[1]), (high[2] - high[0], high[3] - high[1]))  # same size
+        self.assertGreater(low[1], high[1])  # the jump shows: not both pushed down to the bottom
+        alone = pictures.make_sprite(self.m, self.ghoul, "ghoul-2.png", outline=False)
+        self.assertNotEqual(alone.getchannel("A").getbbox(), high)  # shrunk on its own it would be re-centered
+        with self.assertRaisesRegex(pictures.PictureError, "no frame 'ghoul_run_1'"):
+            pictures.make_frames(self.m, self.ghoul, {"ghoul_run_1": "ghoul-1.png"})
+
+    def test_use_frames_and_poses(self) -> None:
+        problems = pictures.use_frames(self.m, self.ghoul, {"ghoul": "ghoul-1.png", "ghoul_walk_1": "ghoul-2.png"})
+        art = self.root / "assets" / "art"
+        self.assertEqual(sorted(p.name for p in art.iterdir()), ["ghoul.png", "ghoul_walk_1.png"])
+        self.assertTrue(any("ghoul_walk_2" in p for p in problems), problems)
+        self.assertIn("left foot forward", pictures.pose(self.m, self.ghoul, "ghoul_walk_1"))
+        self.assertIn("right foot forward", pictures.pose(self.m, self.ghoul, "ghoul_walk_2"))
+
+    def test_page_makes_missing_frames_then_saves_them(self) -> None:
+        fake = self.fake_worker(self.root)
+        patches = [unittest.mock.patch.dict("os.environ", {"GAMEKIT_ENGINES": str(self.root / "engines")}),
+                   unittest.mock.patch.object(engines, "worker", lambda name: fake),
+                   unittest.mock.patch.object(engines, "is_installed", lambda engine: engine.name == "picture")]
+        for patch in patches:
+            patch.start()
+        server = ui.make_server(self.root / "assets.yaml", 0)
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+
+        def post(path: str, body: dict) -> tuple[int, dict]:
+            request = urllib.request.Request(base + path, data=json.dumps(body).encode(),
+                                             headers={"Content-Type": "application/json", "X-Gamekit": "1"})
+            try:
+                with urllib.request.urlopen(request) as response:
+                    return response.status, json.loads(response.read())
+            except urllib.error.HTTPError as error:
+                return error.code, json.loads(error.read())
+
+        try:
+            with urllib.request.urlopen(base + "/api/state") as response:
+                ghoul = json.loads(response.read())["assets"][0]
+            self.assertEqual(ghoul["animations"], {"idle": ["ghoul"], "walk": ["ghoul_walk_1", "ghoul_walk_2"]})
+            code, data = post("/api/pictures/frames", {"id": "ghoul", "name": "ghoul-1.png",
+                                                      "poses": {"ghoul_walk_1": "walking", "ghoul_walk_2": "walking 2"}})
+            self.assertEqual(code, 200, data)
+            for _ in range(200):
+                job = post("/api/job", {})[1]["job"]
+                if job and job["state"] != "running":
+                    break
+                time.sleep(0.05)
+            self.assertEqual(job["state"], "done", job)
+            made = job["result"]["frames"]
+            self.assertEqual(sorted(made), ["ghoul_walk_1", "ghoul_walk_2"])
+            meta = pictures.read_meta(self.root / "pictures" / made["ghoul_walk_1"])
+            self.assertEqual((meta["for"], meta["frame"], meta["refs"], meta["width"]),
+                             ("ghoul", "ghoul_walk_1", ["ghoul-1.png"], 200))  # made from the base, at its size
+            frames = {"ghoul": "ghoul-1.png"} | made
+            code, data = post("/api/pictures/animation", {"id": "ghoul", "frames": frames})
+            self.assertEqual((code, sorted(data["frames"])), (200, ["ghoul", "ghoul_walk_1", "ghoul_walk_2"]))
+            code, data = post("/api/pictures/animation/use", {"id": "ghoul", "frames": frames})
+            self.assertEqual((code, data["problems"]), (200, []))
+            self.assertEqual(post("/api/pictures/animation/use", {"id": "ghoul", "frames": frames})[1]["error"], "REPLACE?")
+            self.assertEqual(manifest.load(self.root / "assets.yaml").assets[0].status, "draft")
+        finally:
+            server.shutdown()
+            server.server_close()
+            fake.stop()
+            for patch in patches:
+                patch.stop()
+
+
 if __name__ == "__main__":
     unittest.main()
