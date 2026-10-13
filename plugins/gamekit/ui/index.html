@@ -898,7 +898,10 @@ $('makePictures').onclick = () => {
 async function touchUp(settings) {
   const done = await api('/api/touchup', settings);
   if (!done) return;
-  showStatus(`${done.message} Claude edits ${done.path} pixel by pixel; the game shows the draft already.`, false);
+  // the draft is the asset's own file now, not a picture: show it on the Assets tab
+  showStatus(`${done.message} It's the game's ${settings.id} now (shown here on the Assets tab). Next, ask Claude: "touch up the ${settings.id}".`, false);
+  $('fText').value = settings.id;
+  setTab('assets');
   load();
 }
 
