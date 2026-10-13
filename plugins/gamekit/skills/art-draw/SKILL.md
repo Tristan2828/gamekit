@@ -53,7 +53,8 @@ keys:          # optional; char -> palette color name, palette index, or RRGGBB
    A reference picture helps for new designs: the `picture-make` skill makes one on the user's PC (describe the
    subject, plain white background), then draw the sprite from it rather than shrinking it.
 2. Write `art/<id>.yaml`. Pixel art basics at small sizes:
-   - Dark 1px outline around the silhouette; readable shape first, details second.
+   - Dark 1px outline around the silhouette; readable shape first, details second. If `assets.yaml` has a
+     `sprites:` block, use its `outline` color and never its `reserved_colors`.
    - Light from the top-left: 1 highlight and 1-2 shade colors per material, no gradients.
    - Keep the palette small per sprite (4-8 colors). Avoid stray single pixels and "pillow shading".
    - Animation: change as few pixels as needed; keep the outline and feet consistent so it doesn't

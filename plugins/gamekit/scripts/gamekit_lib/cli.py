@@ -154,6 +154,8 @@ def main(argv: list[str] | None = None) -> int:
     pic.add_argument("--tile", action="store_true", help="repeats without a seam (textures)")
     pic.add_argument("--from", dest="refs", action="append", default=[],
                      help="a picture in pictures/ to work from (repeatable)")
+    pic.add_argument("--for", dest="for_asset", default="",
+                     help="the asset it's for: names the files after it, and Use as asset picks it")
     pic_cut = commands.add_parser("picture-cutout", help="a copy of a picture with a transparent background (cutout engine)")
     pic_cut.add_argument("pictures", nargs="+", help="file names in pictures/")
     pic_use = commands.add_parser("picture-use", help="make a picture an image asset's file (shrunk, palette)")
@@ -161,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     pic_use.add_argument("asset", help="asset id")
     pic_use.add_argument("--keep-background", action="store_true", help="don't remove the background")
     pic_use.add_argument("--no-palette", action="store_true", help="don't snap colors to the palette")
+    pic_use.add_argument("--no-outline", action="store_true", help="no outline, even if the manifest's sprites: sets one")
+    pic_use.add_argument("--frame", default="", help="with frame_files: which frame file, e.g. ghoul_walk_1")
     pic_use.add_argument("--force", action="store_true", help="replace an existing asset file")
 
     snd = commands.add_parser("sound", help="make sound effects from a description (sound engine) into sound-takes/")
@@ -728,12 +732,14 @@ def _picture(args: argparse.Namespace) -> int:
     size = _size(args.size, "--size")
     assert size is not None
     request = {"prompt": args.prompt, "width": size[0], "height": size[1], "steps": args.steps, "tile": args.tile,
-               "refs": [str(pictures.path_of(loaded, name)) for name in args.refs]}
+               "refs": [str(pictures.path_of(loaded, name)) for name in args.refs], "for": args.for_asset}
+    if args.for_asset:
+        _asset(loaded, args.for_asset)
     worker = engines.worker("picture")
     try:
         for take in range(max(1, args.takes)):
             seed = args.seed + take if args.seed is not None else random.randrange(1, 2**31 - 1)
-            out = pictures.new_path(loaded, args.prompt, seed)
+            out = pictures.new_path(loaded, args.for_asset or args.prompt, seed)
             answer = worker.ask(request | {"out": str(out), "seed": seed}, lambda s: print(f"  {s}", flush=True))
             pictures.record(out, request, answer)
             print(f"wrote {out.relative_to(loaded.root).as_posix()} (seed {seed})", flush=True)
@@ -760,12 +766,13 @@ def _picture_cutout(args: argparse.Namespace) -> int:
 def _picture_use(args: argparse.Namespace) -> int:
     loaded = manifest.load(args.manifest)
     asset = _asset(loaded, args.asset)
-    if loaded.asset_path(asset).exists() and not args.force:
-        raise pictures.PictureError(f"{loaded.asset_path(asset)} already exists; add --force to replace it")
+    target = {path.stem: path for _, _, path in loaded.frame_paths(asset)}.get(args.frame, loaded.asset_path(asset))
+    if target.exists() and not args.force:
+        raise pictures.PictureError(f"{target} already exists; add --force to replace it")
     problems = pictures.use_as_asset(loaded, asset, args.picture, background=not args.keep_background,
-                                     snap=not args.no_palette)
+                                     snap=not args.no_palette, outline=not args.no_outline, frame=args.frame)
     manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
-    print(f"{asset.id}: {args.picture} -> {asset.file} (source: ai)")
+    print(f"{args.frame or asset.id}: {args.picture} -> {target.relative_to(loaded.root).as_posix()} (source: ai)")
     for problem in problems:
         print(f"  - {problem}")
     return 0

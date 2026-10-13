@@ -23,6 +23,10 @@ palette: palette.hex    # every image is checked against these colors
 # code_art: src/art/pixel_art.gd  # the game's own text sprites (Godot: const PALETTE / const SPRITES of
 #                       # text rows); the asset page shows them for images with no file yet. Sprite name =
 #                       # `replaces`, else the id; frames are named like frame files (hero_walk_1)
+# sprites:              # the game's sprite rules, used when a picture becomes a sprite (Pictures tab, picture-use)
+#   prompt: "pixel art sprite, dark fantasy, front-facing, symmetrical, muted colors"  # starts picture descriptions
+#   outline: "#17121C"  # 1 px outline drawn around the sprite (inside its size)
+#   reserved_colors: ["#FF00FF", "#800080"]  # palette colors with a special meaning: never snapped to
 # audio:                # house levels used by sfx / music commands unless a flag overrides them
 #   sfx_peak_db: -1     # sound effect peak, dBFS
 #   music_lufs: -16     # music loudness, LUFS (unset: music render keeps the game's own mix)

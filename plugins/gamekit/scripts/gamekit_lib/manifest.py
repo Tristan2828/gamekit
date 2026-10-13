@@ -74,6 +74,7 @@ class Manifest:
     frame_files: bool = False
     audio: dict = field(default_factory=dict)
     code_art: str = ""
+    sprites: dict = field(default_factory=dict)  # the game's sprite rules: prompt, outline, reserved_colors
 
     @property
     def sfx_peak_db(self) -> float:
@@ -167,6 +168,7 @@ def load(path: str | Path) -> Manifest:
         frame_files=data.get("frame_files", False) is True,
         audio=dict(data.get("audio") or {}) if isinstance(data.get("audio") or {}, dict) else {"_bad": True},
         code_art=str(data.get("code_art") or ""),
+        sprites=dict(data.get("sprites") or {}) if isinstance(data.get("sprites") or {}, dict) else {"_bad": True},
     )
 
 
@@ -189,6 +191,26 @@ def _asset_from_dict(raw: dict) -> Asset:
     )
 
 
+HEX_PATTERN = re.compile(r"^#?[0-9a-fA-F]{6}$")
+
+
+def _sprite_rule_problems(rules: dict) -> list[str]:
+    if rules.get("_bad"):
+        return ["sprites: must be a mapping (prompt, outline, reserved_colors)"]
+    problems = []
+    unknown = set(rules) - {"prompt", "outline", "reserved_colors"}
+    if unknown:
+        problems.append(f"sprites: unknown keys {sorted(unknown)}")
+    if "prompt" in rules and not isinstance(rules["prompt"], str):
+        problems.append("sprites.prompt: text")
+    if "outline" in rules and not (isinstance(rules["outline"], str) and HEX_PATTERN.match(rules["outline"])):
+        problems.append(f"sprites.outline: a color like \"#17121C\", got {rules['outline']!r}")
+    reserved = rules.get("reserved_colors", [])
+    if not (isinstance(reserved, list) and all(isinstance(c, str) and HEX_PATTERN.match(c) for c in reserved)):
+        problems.append("sprites.reserved_colors: a list of colors like \"#FF00FF\"")
+    return problems
+
+
 def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
     """Returns a list of problems; empty means the manifest is valid."""
     problems: list[str] = []
@@ -206,6 +228,7 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
             value = manifest.audio.get(key)
             if value is not None and (not isinstance(value, (int, float)) or value > 0):
                 problems.append(f"audio.{key}: a negative number (dB), got {value!r}")
+    problems += _sprite_rule_problems(manifest.sprites)
     if manifest.code_art and not (manifest.root / manifest.code_art).is_file():
         problems.append(f"code_art: {manifest.code_art} not found")
     seen: set[str] = set()

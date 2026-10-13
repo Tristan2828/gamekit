@@ -10,10 +10,10 @@ CLI (run from the game's root, the folder with `assets.yaml`; `python3` if `pyth
 ```
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines list
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines setup picture      # once per PC; ask first (several GB)
-python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture "<description>" [--takes 2] [--size 1024x1024] [--tile] [--seed N] [--from <picture.png>]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture "<description>" [--takes 2] [--size 1024x1024] [--tile] [--seed N] [--from <picture.png>] [--for <asset-id>]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines setup cutout       # small (~300 MB, no PyTorch); fine to run
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-cutout <picture.png> [more.png...]
-python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-use <picture.png> <asset-id> [--keep-background] [--no-palette] [--force]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" picture-use <picture.png> <asset-id> [--frame <name>_walk_1] [--keep-background] [--no-palette] [--no-outline] [--force]
 ```
 
 The user can do all of this on the Pictures tab of the asset page (`gamekit ui`), which is easier for them:
@@ -50,18 +50,26 @@ pictures appear as they're made, with Keep / Another take / Work from this / Cut
 ## Pictures and pixel art sprites
 
 `picture-use` removes a plain background (a flood fill from the corners; a picture that is already transparent,
-such as a cut-out, keeps its own), crops to the subject, shrinks it to the asset's size (bottom-centered),
-makes edges hard and snaps colors to the palette; it sets the asset's `source: ai` (and `todo` -> `draft`).
+such as a cut-out, keeps its own), crops to the subject, shrinks it to the asset's size (bottom-centered), and
+snaps to the palette by hue: each sprite pixel takes its patch's most common palette color, so eyes and accents
+survive. It sets the asset's `source: ai` (and `todo` -> `draft`).
 
-- **Small sprites (under ~24 px): don't shrink pictures; redraw them.** Shrinking a painting to 16x16 gives
-  speckled, outline-less pixels. Use the picture as a reference and draw the sprite yourself with the
-  `art-draw` skill (silhouette, outline, a few palette colors), then say it was drawn from the picture.
-- For anything with a busy background, soft edges or gaps (arms, legs, hair), run `picture-cutout` first and
-  use the cut-out.
-- Shrinking works for textures (`tileset` assets fill the whole tile), backgrounds and larger art.
-- Check for palette colors with a special meaning in the game (e.g. GameTest's magenta = player color) after
-  snapping; `--no-palette` keeps the picture's own colors.
-- Animated sprites: a picture makes one frame; draw the animation with `art-draw`.
+- The manifest's `sprites:` block holds the game's rules: `prompt` (words that start descriptions made for a
+  sprite), `outline` (1 px outline color drawn inside the size; `--no-outline` skips it) and `reserved_colors`
+  (never snapped to, e.g. player colors). Read it before writing a description or using a picture.
+- Descriptions for a sprite: start with its grid, "a 12x12 pixel art sprite, each pixel a clean square block",
+  then the `sprites.prompt` words, "plain white background, whole body in view" and the look (the asset's
+  `notes`). Chunky, chibi proportions with big eyes survive shrinking far better than realistic ones. Pass
+  `--for <asset-id>` so the files are named after the asset.
+- Animated sprites (manifest `frame_files: true`): one picture per frame. Make the base pose, then
+  `--from <base.png>` with only the pose ("the same creature, same colors and style, walking, left foot
+  forward"), and `picture-use ... --frame shambler_walk_1`. Sheets (no frame_files): draw with `art-draw`.
+- Run `picture-cutout` before using a picture as a sprite.
+- Expect: 18 px and up usable drafts; 10 to 14 px readable blobs; smaller or very wide (14x8) loses the face.
+  For those, **redraw instead**: look at the picture (Read the PNG) and draw the sprite with the `art-draw`
+  skill (silhouette, outline, a few palette colors), then say it was drawn from the picture.
+- Look at the result (Read the asset PNG, zoomed) before calling it done, and say honestly what's off.
+- Shrinking works well for textures (`tileset` assets fill the whole tile, no outline) and larger art.
 
 AI pictures are the game's own (`source: ai` credits them as "made with a local AI model"); no license entry is
 needed. Never pass off a picture made to imitate a named living artist's style.

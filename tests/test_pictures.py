@@ -325,5 +325,84 @@ class PicturePageTests(FakeWorkerMixin, unittest.TestCase):
         self.assertEqual((code, data["error"]), (400, "still busy: something long"))
 
 
+RULES_MANIFEST = """game: T
+palette: palette.hex
+frame_files: true
+sprites:
+  prompt: "pixel art sprite, dark fantasy"
+  outline: "#17121C"
+  reserved_colors: ["#C83C3C"]
+assets:
+  - {id: ghoul, kind: sprite, source: claude, status: todo, file: art/ghoul.png, size: [10, 10], frames: {idle: 1, walk: 2}, notes: a red brute}
+"""
+
+
+class SpriteRulesTests(unittest.TestCase):
+    """The manifest's sprites: rules (outline, reserved colors) and frame files as targets."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "assets.yaml").write_text(RULES_MANIFEST, encoding="utf-8")
+        # a red that is the nearest color to the picture's red, but reserved; a darker red to fall back on
+        (self.root / "palette.hex").write_text("17121c\nc83c3c\n902020\nffffff\n", encoding="utf-8")
+        (self.root / "pictures").mkdir()
+        image = Image.new("RGB", (200, 200), "white")
+        ImageDraw.Draw(image).rectangle([60, 20, 139, 199], fill=(200, 60, 60))
+        image.save(self.root / "pictures" / "ghoul-1.png")
+        self.m = manifest.load(self.root / "assets.yaml")
+        self.ghoul = self.m.assets[0]
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_rules_are_valid_and_checked(self) -> None:
+        self.assertEqual(manifest.validate(self.m, check_files=False), [])
+        bad = RULES_MANIFEST.replace('outline: "#17121C"', "outline: dark").replace("prompt:", "promt:")
+        (self.root / "assets.yaml").write_text(bad, encoding="utf-8")
+        problems = " ".join(manifest.validate(manifest.load(self.root / "assets.yaml"), check_files=False))
+        self.assertIn("sprites.outline", problems)
+        self.assertIn("unknown keys ['promt']", problems)
+
+    def test_outline_and_reserved_colors(self) -> None:
+        sprite = pictures.make_sprite(self.m, self.ghoul, "ghoul-1.png")
+        self.assertEqual(sprite.size, (10, 10))
+        colors = {sprite.getpixel((x, y)) for x in range(10) for y in range(10)}
+        self.assertIn((0x17, 0x12, 0x1C, 255), colors)               # the outline
+        self.assertNotIn((0xC8, 0x3C, 0x3C, 255), colors)            # reserved: never snapped to
+        self.assertIn((0x90, 0x20, 0x20, 255), colors)
+        self.assertEqual(sprite.getpixel((5, 9)), (0x17, 0x12, 0x1C, 255))  # stands on its outline
+        plain = pictures.make_sprite(self.m, self.ghoul, "ghoul-1.png", outline=False)
+        self.assertEqual(plain.getpixel((5, 9)), (0x90, 0x20, 0x20, 255))
+
+    def test_one_frame_at_a_time(self) -> None:
+        self.assertEqual(pictures.frame_targets(self.m, self.ghoul), ["ghoul", "ghoul_walk_1", "ghoul_walk_2"])
+        pictures.use_as_asset(self.m, self.ghoul, "ghoul-1.png", frame="ghoul_walk_2")
+        art = self.root / "assets" / "art"
+        self.assertEqual(sorted(p.name for p in art.iterdir()), ["ghoul_walk_2.png"])
+        problems = pictures.use_as_asset(self.m, self.ghoul, "ghoul-1.png")  # the first frame by default
+        self.assertTrue((art / "ghoul.png").exists())
+        self.assertTrue(any("ghoul_walk_1" in p for p in problems), problems)  # still missing
+        with self.assertRaisesRegex(pictures.PictureError, "no frame 'ghoul_run_1'"):
+            pictures.use_as_asset(self.m, self.ghoul, "ghoul-1.png", frame="ghoul_run_1")
+
+    def test_preview_route(self) -> None:
+        server = ui.make_server(self.root / "assets.yaml", 0)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_address[1]}/api/pictures/preview",
+                data=json.dumps({"name": "ghoul-1.png", "id": "ghoul"}).encode(),
+                headers={"Content-Type": "application/json", "X-Gamekit": "1"})
+            with urllib.request.urlopen(request) as response:
+                data = json.loads(response.read())
+            self.assertEqual((data["width"], data["height"]), (10, 10))
+            self.assertTrue(data["image"].startswith("data:image/png;base64,"))
+            self.assertFalse((self.root / "assets").exists())  # nothing saved
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
 if __name__ == "__main__":
     unittest.main()

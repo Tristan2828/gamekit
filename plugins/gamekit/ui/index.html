@@ -117,6 +117,8 @@
   .use.open { display: block; }
   .use select { padding: 5px 8px; font-size: 13px; }
   .use .check { font-size: 13px; margin-top: 6px; }
+  .use .preview { display: flex; gap: 10px; align-items: flex-end; margin-top: 8px; min-height: 40px; }
+  .use .preview img { image-rendering: pixelated; background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
   #bigPic { display: none; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.85); align-items: center; justify-content: center; cursor: zoom-out; }
   #bigPic img { max-width: 94vw; max-height: 94vh; }
   .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
@@ -265,7 +267,9 @@
       </div>
       <div id="pictureForm">
         <h2>Describe the picture</h2>
-        <textarea id="pPrompt" placeholder="e.g. pixel art sprite of a hooded cultist holding a candle, dark fantasy, full body, plain white background"></textarea>
+        <label for="pFor">For asset (optional): starts the description from the game's sprite rules and the asset's notes</label>
+        <select id="pFor"></select>
+        <textarea id="pPrompt" style="margin-top:8px" placeholder="e.g. pixel art sprite of a hooded cultist holding a candle, dark fantasy, full body, plain white background"></textarea>
         <div class="chips" id="styleChips"></div>
         <div class="row"><div><label for="pSize">Size</label><select id="pSize">
           <option value="1024x1024">Square, 1024</option><option value="768x768">Square, 768 (faster)</option>
@@ -273,7 +277,9 @@
           <div><label for="pTakes">Takes</label><input type="number" id="pTakes" min="1" max="8" value="2"></div></div>
         <label class="check"><input type="checkbox" id="pTile"> Repeats without a seam (textures)</label>
         <div class="row"><div><label for="pSeed">Seed (optional)</label><input type="number" id="pSeed" placeholder="random"></div><div></div></div>
-        <div id="refBox" style="display:none"><label>Working from</label><div class="refs" id="refList"></div><button id="clearRefs" style="margin-top:6px;font-size:12.5px">Clear</button></div>
+        <div id="refBox" style="display:none"><label>Working from</label><div class="refs" id="refList"></div>
+          <div class="hint" style="margin-top:6px">For animation frames, describe only the pose: the picture keeps the creature's look.</div>
+          <div class="chips" id="poseChips"></div><button id="clearRefs" style="margin-top:6px;font-size:12.5px">Clear</button></div>
         <button class="primary" id="makePictures">Make it</button>
         <div class="hint" id="pictureHint" style="margin-top:10px"></div>
       </div>
@@ -665,10 +671,40 @@ $('styleChips').querySelectorAll('button').forEach(b => b.onclick = () => {
   box.focus();
 });
 
+const POSES = {
+  'walk 1': 'the same creature, same colors and style, walking, left foot forward',
+  'walk 2': 'the same creature, same colors and style, walking, right foot forward',
+  'attack': 'the same creature, same colors and style, attacking',
+  'wings up': 'the same creature, same colors and style, wings raised high',
+  'wings down': 'the same creature, same colors and style, wings swept down',
+  'flicker': 'the same creature, same colors and style, flames flickering higher',
+};
+$('poseChips').innerHTML = Object.keys(POSES).map(k => `<button data-pose="${esc(k)}">${esc(k)}</button>`).join('');
+$('poseChips').querySelectorAll('button').forEach(b => b.onclick = () => { $('pPrompt').value = POSES[b.dataset.pose]; $('pPrompt').focus(); });
+
+// pictures can become an image with a pixel size, or (with frame files) any one frame of a sprite
 function imageAssets() {
   return S.assets.filter(a => ['sprite', 'tileset', 'icon', 'ui'].includes(a.kind) && Array.isArray(a.size) &&
-    !(a.frames && Object.values(a.frames).reduce((x, y) => x + y, 0) > 1));
+    a.targets && a.targets.length && !(a.targets.length === 1 && a.frames && Object.values(a.frames).reduce((x, y) => x + y, 0) > 1));
 }
+// the asset's own pixel grid in the words ("a 12x12 pixel art sprite, each pixel a clean square block") makes the
+// picture blocky and simple enough to survive shrinking to that size
+function forAssetPrompt(a) {
+  const rules = (S.sprites && S.sprites.prompt) || 'chunky, clean dark outline, limited color palette';
+  const what = a.notes || a.id.replace(/_/g, ' ');
+  const grid = a.kind === 'tileset' ? `a ${a.size[0]}x${a.size[1]} pixel art texture, each pixel a clean square block`
+    : `a ${a.size[0]}x${a.size[1]} pixel art sprite, each pixel a clean square block`;
+  return a.kind === 'tileset' ? `${grid}, ${rules}: ${what}` : `${grid}, ${rules}, plain white background, whole body in view: ${what}`;
+}
+$('pFor').onchange = () => {
+  const a = S.assets.find(x => x.id === $('pFor').value);
+  store.set('pFor', $('pFor').value);
+  if (!a) return;
+  $('pPrompt').value = forAssetPrompt(a);
+  const [w, h] = a.size, wide = w / h;
+  $('pSize').value = wide > 1.4 ? '1344x768' : wide < 0.7 ? '768x1344' : '1024x1024';
+  $('pTile').checked = a.kind === 'tileset';
+};
 
 async function renderPictures() {
   const engine = S.engines && S.engines.picture;
@@ -679,6 +715,9 @@ async function renderPictures() {
     `also in games you sell). Setting up installs PyTorch for your graphics card into <code>${esc(engine.folder)}</code> (a few GB, several minutes).`;
   $('pictureHint').innerHTML = 'The first picture loads the model (about 30 s); more takes of the same description are quicker. ' +
     'Ask for a <b>plain white background</b> when the picture will become a sprite, then <b>Cut out</b> gives it a clean transparent one.';
+  const forWas = $('pFor').value || store.get('pFor', '');
+  $('pFor').innerHTML = option('', '(none)', false) + imageAssets().map(a =>
+    option(a.id, `${a.id} (${a.size.join('×')}${a.targets.length > 1 ? ', ' + a.targets.length + ' frames' : ''}, ${a.status})`, a.id === forWas)).join('');
   $('refBox').style.display = refs.length ? 'block' : 'none';
   $('refList').innerHTML = refs.map(r => `<span>${esc(r)}</span>`).join('');
   const data = await api('/api/pictures', {}, true);
@@ -703,12 +742,15 @@ async function renderPictures() {
         <button data-useopen="${esc(p.name)}">Use as asset…</button>
         <button data-premove="${esc(p.name)}" title="Moves it to pictures/_removed">Remove</button>
       </div>
-      <div class="use" id="use-${esc(p.name)}">
-        <select>${assetOptions}</select>
+      <div class="use" id="use-${esc(p.name)}" data-for="${esc(m.for || '')}">
+        <select class="asset">${assetOptions}</select>
+        <select class="frame" style="margin-top:6px"></select>
         <label class="check"><input type="checkbox" class="bg" checked> Remove the background${m.cutout_of ? ' (already cut out)' : ''}</label>
-        <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette</label>
+        <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette${S.sprites && S.sprites.reserved_colors ? ' (not the reserved colors)' : ''}</label>
+        ${S.sprites && S.sprites.outline ? `<label class="check"><input type="checkbox" class="outline" checked> 1 px outline ${esc(S.sprites.outline)}</label>` : ''}
+        <div class="preview"><img alt=""><span class="hint"></span></div>
         <div class="buttons"><button data-use="${esc(p.name)}">Use</button></div>
-        <div class="hint">Shrinks it to the asset's size. At tiny sizes detail is lost: ask Claude to redraw it as pixel art from this picture instead.</div>
+        <div class="hint">Shrinks it to the asset's size; the preview is exactly what Use saves. At tiny sizes detail is lost: ask Claude to redraw it as pixel art from this picture instead.</div>
       </div>
     </div>`;
   }).join('') : '<div class="empty">No pictures yet. Describe one and press <b>Make it</b>.</div>';
@@ -720,7 +762,7 @@ async function renderPictures() {
     if (await api('/api/pictures/remove', { name: b.dataset.premove })) renderPictures(); });
   $('picList').querySelectorAll('[data-again]').forEach(b => b.onclick = () => {
     const m = byName(b.dataset.again).meta;
-    startJob('/api/pictures/make', { prompt: m.prompt, width: m.width, height: m.height, tile: m.tile, takes: 1, refs: m.refs || [] });
+    startJob('/api/pictures/make', { prompt: m.prompt, width: m.width, height: m.height, tile: m.tile, takes: 1, refs: m.refs || [], for: m.for || '' });
   });
   $('picList').querySelectorAll('[data-adjust]').forEach(b => b.onclick = () => {
     const m = byName(b.dataset.adjust).meta;
@@ -730,6 +772,7 @@ async function renderPictures() {
     $('pTile').checked = !!m.tile;
     $('pSeed').value = m.seed ?? '';
     refs.splice(0, refs.length, ...(m.refs || []));
+    if (m.for) { store.set('pFor', m.for); $('pFor').value = m.for; }
     renderPictures();
     $('pPrompt').focus();
   });
@@ -740,13 +783,38 @@ async function renderPictures() {
   });
   $('picList').querySelectorAll('[data-cut]').forEach(b => b.onclick = () =>
     cutReady ? startJob('/api/pictures/cutout', { name: b.dataset.cut }) : startJob('/api/engines/setup', { name: 'cutout' }));
-  $('picList').querySelectorAll('[data-useopen]').forEach(b => b.onclick = () =>
-    document.getElementById('use-' + b.dataset.useopen).classList.toggle('open'));
+  const useSettings = (box, name) => ({ name, id: box.querySelector('.asset').value, frame: box.querySelector('.frame').value,
+    background: box.querySelector('.bg').checked, snap: box.querySelector('.snap').checked,
+    outline: box.querySelector('.outline') ? box.querySelector('.outline').checked : false });
+  async function previewUse(box, name) {
+    const settings = useSettings(box, name), img = box.querySelector('.preview img'), note = box.querySelector('.preview .hint');
+    if (!settings.id) return;
+    const data = await api('/api/pictures/preview', settings, true);
+    if (!data) { img.removeAttribute('src'); note.textContent = ''; return; }
+    const zoom = Math.max(2, Math.floor(96 / Math.max(data.width, data.height)));
+    img.src = data.image; img.width = data.width * zoom; img.height = data.height * zoom;
+    note.textContent = `${data.width}×${data.height}, shown ×${zoom}`;
+  }
+  function fillFrames(box) {
+    const a = S.assets.find(x => x.id === box.querySelector('.asset').value), frames = box.querySelector('.frame');
+    const targets = (a && a.targets) || [];
+    frames.innerHTML = targets.map(t => option(t, t === targets[0] && targets.length > 1 ? `${t} (first frame)` : t, false)).join('');
+    frames.style.display = targets.length > 1 ? 'block' : 'none';
+  }
+  $('picList').querySelectorAll('[data-useopen]').forEach(b => b.onclick = () => {
+    const box = document.getElementById('use-' + b.dataset.useopen);
+    box.classList.toggle('open');
+    if (!box.classList.contains('open')) return;
+    if (box.dataset.for && [...box.querySelector('.asset').options].some(o => o.value === box.dataset.for)) box.querySelector('.asset').value = box.dataset.for;
+    fillFrames(box);
+    previewUse(box, b.dataset.useopen);
+    box.querySelector('.asset').onchange = () => { fillFrames(box); previewUse(box, b.dataset.useopen); };
+    box.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = () => previewUse(box, b.dataset.useopen));
+  });
   $('picList').querySelectorAll('[data-use]').forEach(b => b.onclick = async () => {
-    const box = document.getElementById('use-' + b.dataset.use);
-    const id = box.querySelector('select').value;
-    if (!id) return;
-    const done = await api('/api/pictures/use', { name: b.dataset.use, id, background: box.querySelector('.bg').checked, snap: box.querySelector('.snap').checked });
+    const settings = useSettings(document.getElementById('use-' + b.dataset.use), b.dataset.use);
+    if (!settings.id) return;
+    const done = await api('/api/pictures/use', settings);
     if (done) load();
   });
 }
@@ -756,7 +824,7 @@ $('setupPicture').onclick = () => startJob('/api/engines/setup', { name: 'pictur
 $('makePictures').onclick = () => {
   const [width, height] = $('pSize').value.split('x').map(Number);
   startJob('/api/pictures/make', { prompt: $('pPrompt').value, width, height, takes: +$('pTakes').value || 1,
-    tile: $('pTile').checked, seed: $('pSeed').value, refs });
+    tile: $('pTile').checked, seed: $('pSeed').value, refs, for: $('pFor').value });
 };
 
 // ---------- Music tab: AI takes ----------

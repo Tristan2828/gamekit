@@ -231,30 +231,50 @@ first for better structure, but takes about 7 minutes a take on your AMD card an
 
 Pictures from a description (FLUX.2 klein), on your graphics card.
 
-1. **Describe the picture** in the box. Style first, then the subject: "pixel art sprite of a hooded cultist
-   holding a candle, dark fantasy, full body, plain white background".
-2. The **style buttons** add common endings (pixel art sprite, item icon, seamless texture, character sheet,
-   concept art, dark fantasy). FLUX.2 klein draws good pixel art on its own with the **pixel art sprite** words.
+1. **For asset** (optional): pick the sprite the picture is for, e.g. *shambler (12×12, 3 frames)*. It writes
+   the description for you, from the asset's size ("a 12x12 pixel art sprite, each pixel a clean square block"),
+   the game's sprite rules and the asset's notes in `assets.yaml`. It also picks a wide or tall size to match,
+   and names the pictures after the asset (`shambler-31.png`). Change the words as you like.
+2. Or **describe the picture** yourself. Style first, then the subject. The **style buttons** add common endings
+   (pixel art sprite, item icon, seamless texture, character sheet, concept art, dark fantasy).
 3. **Size**: 768 is faster. **Takes**: how many versions. **Repeats without a seam** for floor and wall textures.
    **Seed**: leave empty for new versions.
 4. **Make it**. Click any picture to see it full size.
 
-Besides the usual take buttons, pictures have **Work from this**: the next pictures start from that one, so you
-can describe "the same character seen from behind" and get a matching back view.
+**Work from this** starts the next pictures from that one. Use it for **animation frames**: make the base pose,
+press **Work from this**, then a pose button (**walk 1**, **walk 2**, **attack**, **wings up**...) and **Make it**.
+The new picture keeps the creature's look and changes only the pose.
 
 **Cut out** makes a copy of a picture with the background made transparent by a second AI model (BiRefNet),
-shown on a checkerboard and marked "cut-out". It keeps soft edges, hair and gaps between arms and body, which the
-simple background removal under **Use as asset…** can miss, and it works on busy backgrounds too. Use the cut-out
-as the asset (its transparency is kept as it is).
+shown on a checkerboard and marked "cut-out". It keeps soft edges and the gaps between arms and body, which the
+simple background removal can miss. Cut out before you use a picture as a sprite.
 
-**Use as asset…** turns a picture into one of the game's images: the background removed (**Remove the
-background**), shrunk to the asset's size, and the colors snapped to the palette (**Snap to the palette**).
-Animated sprites can't be made this way (a picture is one frame).
+**Use as asset…** turns a picture into one of the game's images:
+- Pick the asset and, for animated sprites, **which frame** (`shambler`, `shambler_walk_1`, `shambler_walk_2`).
+  Each frame is its own file, so use one picture per frame.
+- **Remove the background**, **Snap to the palette** (never to the reserved player colors) and the **1 px
+  outline** follow the game's sprite rules.
+- The **preview** shows exactly what **Use** will save, at its real size and zoomed in. Change the options and
+  it updates.
 
-**Tip for pixel art:** shrinking a big picture to a tiny sprite (16×16 and smaller) loses most of the detail,
-and snapping to the palette can pick colors with a special meaning (in GameTest, magenta is the player color).
-For small sprites, use the picture as a reference and ask Claude to draw the sprite from it. Shrinking works
-well for textures and bigger images.
+How shrinking works: each sprite pixel takes the most common palette color in its patch of the picture, matched
+by hue. So small details such as red eyes keep their color instead of turning into a brown-grey average.
+
+**What to expect at each size** (tried on GameTest's enemies):
+- **18×18 and bigger** (bosses, ghoul, paladin): good starting points, often usable after a quick touch-up.
+- **10 to 14 px** (shambler, cultist, imp): readable blobs with the right colors and eyes. Fine as drafts.
+- **Smaller or very wide** (bat 14×8, mire crawler 10×8): the face mostly disappears.
+For the small ones, keep your favorite picture and ask Claude to draw the sprite from it: "draw the bat from
+`pictures/bat-31.png`". Claude can look at the picture, and drawing by hand at 8 px beats any shrink.
+
+**The game's sprite rules** live at the top of `assets.yaml`:
+
+```yaml
+sprites:
+  prompt: "chunky, chibi proportions, oversized head, big glowing eyes, dark fantasy, ..."
+  outline: "#17121C"                       # 1 px outline drawn around every sprite
+  reserved_colors: ["#FF00FF", "#800080"]  # player colors: never snapped to
+```
 
 ## Voices tab: AI voice-overs
 

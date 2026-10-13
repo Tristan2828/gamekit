@@ -8,6 +8,7 @@ Adding a tab later (for example an AI generator): a section in index.html plus a
 """
 from __future__ import annotations
 
+import base64
 import io
 import json
 import mimetypes
@@ -89,6 +90,7 @@ def asset_json(loaded: manifest.Manifest, a: manifest.Asset) -> dict:
         "src": src.relative_to(loaded.root).as_posix() if src is not None else None,
         "src_exists": bool(src and src.exists()),
         "license": lic,
+        "targets": pictures.frame_targets(loaded, a) if is_image else [],
     }
 
 
@@ -113,6 +115,7 @@ def state(loaded: manifest.Manifest) -> dict:
         "music_lufs": loaded.music_lufs,
         "has_render_script": bool(loaded.music.get("render_script")),
         "code_art": loaded.code_art,
+        "sprites": {k: v for k, v in loaded.sprites.items() if k != "_bad"},
         "engines": {name: engines.status(e) for name, e in engines.ENGINES.items()},
         "problems": manifest.validate(loaded, check_files=False),
         "assets": [asset_json(loaded, a) for a in loaded.assets],
@@ -516,7 +519,7 @@ def do_make_pictures(loaded: manifest.Manifest, body: dict) -> dict:
     fixed_seed = _number(body, "seed")
     refs = [str(pictures.path_of(loaded, name)) for name in body.get("refs") or []]
     request = {"prompt": prompt, "width": width, "height": height, "steps": steps, "tile": bool(body.get("tile")),
-               "refs": refs}
+               "refs": refs, "for": str(body.get("for") or "")}
 
     def work(job: Job) -> dict:
         made = []
@@ -524,7 +527,7 @@ def do_make_pictures(loaded: manifest.Manifest, body: dict) -> dict:
             if job.cancel:
                 break
             seed = int(fixed_seed) + take if fixed_seed is not None else random.randrange(1, 2**31 - 1)
-            out = pictures.new_path(loaded, prompt, seed)
+            out = pictures.new_path(loaded, request["for"] or prompt, seed)
             label = f"picture {take + 1} of {takes}: " if takes > 1 else ""
 
             def on_step(text: str) -> None:
@@ -572,12 +575,26 @@ def do_remove_picture(loaded: manifest.Manifest, body: dict) -> dict:
 def do_use_picture(loaded: manifest.Manifest, body: dict) -> dict:
     """A picture becomes an image asset's file: background removed, shrunk, snapped to the palette."""
     a = find(loaded, str(body.get("id", "")))
-    _overwrite_guard(loaded.asset_path(a), body)
+    frame = str(body.get("frame") or "")
+    frames = {path.stem: path for _, _, path in loaded.frame_paths(a)}
+    _overwrite_guard(frames.get(frame, loaded.asset_path(a)), body)
     problems = pictures.use_as_asset(loaded, a, str(body.get("name", "")), background=bool(body.get("background", True)),
-                                     snap=bool(body.get("snap", True)))
+                                     snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)),
+                                     frame=frame)
     changes = {"source": "ai"} | ({"status": "draft"} if a.status == "todo" else {})
     manifest.set_fields(loaded.path, a.id, changes)
-    return {"problems": problems, "message": f"{a.id} now uses {body.get('name')} (source: ai)"}
+    return {"problems": problems, "message": f"{frame or a.id} now uses {body.get('name')} (source: ai)"}
+
+
+def do_preview_picture(loaded: manifest.Manifest, body: dict) -> dict:
+    """What Use would make, without saving: the sprite as a PNG data URL, at its real size."""
+    a = find(loaded, str(body.get("id", "")))
+    sprite = pictures.make_sprite(loaded, a, str(body.get("name", "")), background=bool(body.get("background", True)),
+                                  snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)))
+    buffer = io.BytesIO()
+    sprite.save(buffer, "PNG")
+    return {"image": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii"),
+            "width": sprite.width, "height": sprite.height}
 
 
 # --- AI music takes -----------------------------------------------------------------------------------
@@ -752,6 +769,7 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
     "/api/job": do_job, "/api/cancel": do_cancel, "/api/engines/setup": do_engine_setup,
     "/api/pictures": do_pictures, "/api/pictures/make": do_make_pictures, "/api/pictures/keep": do_keep_picture,
     "/api/pictures/remove": do_remove_picture,
+    "/api/pictures/preview": do_preview_picture,
     "/api/pictures/cutout": do_cutout_picture, "/api/pictures/use": do_use_picture,
     "/api/status": do_status, "/api/validate": do_validate, "/api/check": do_check, "/api/credits": do_credits,
     "/api/open-folder": do_open_folder, "/api/info": do_info,
@@ -763,7 +781,8 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
 # these don't wait for a running action (jobs run in the background and only take the job slot)
 READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate", "/api/job", "/api/cancel", "/api/pictures",
              "/api/engines/setup", "/api/pictures/make", "/api/musictakes", "/api/musictakes/make", "/api/takes",
-             "/api/sounds/make", "/api/voices/make", "/api/pictures/cutout"}
+             "/api/sounds/make", "/api/voices/make", "/api/pictures/cutout",
+             "/api/pictures/preview"}
 
 
 # --- the server ------------------------------------------------------------------------------------
