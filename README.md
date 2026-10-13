@@ -38,6 +38,7 @@ Optional programs: Aseprite (exporting your own art), ffmpeg (mp3 / ogg / flac s
 | `/gamekit:pack-import` | Import a downloaded pack, record its license, and cut sprites, frames or sounds out of it |
 | `/gamekit:sfx-make` | Generate retro sound effects (sfxr presets), tweak and audition variants, or clean up downloaded sounds |
 | `/gamekit:picture-make` | Make pictures from a description on your own PC (concept art, references, icons, seamless textures) and turn one into an asset |
+| `/gamekit:voice-make` | Voice-overs read in a voice you describe, on your own PC |
 | `/gamekit:music-make` | Render the game's own music through Godot, or convert downloaded / AI music, into looping OGGs with checked loop points |
 
 ## The asset page
@@ -66,7 +67,8 @@ Python with PyTorch for your card (AMD on Windows via ROCm 7.2.1, NVIDIA via CUD
 `%LOCALAPPDATA%\gamekit\engines`; models download on first use (pictures: FLUX.2 klein 4B, Apache 2.0, ~16 GB).
 Set one up from the page or with `gamekit.py engines setup picture` (needs [uv](https://docs.astral.sh/uv/):
 `winget install astral-sh.uv`). Music: ACE-Step 1.5 (MIT, ~10 GB; its code is fetched with git at a pinned
-commit). The picture and music workers are adapted from Hearthtone's, with thanks.
+commit). Voices: Qwen3-TTS VoiceDesign (Apache 2.0, ~4 GB). Sounds: Stable Audio 3 Small SFX (Stability AI
+Community License, gated: accept it once on Hugging Face). The workers are adapted from Hearthtone's, with thanks.
 
 The same tools work without Claude, from the game's folder:
 
@@ -117,7 +119,7 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 7 | Asset page (`gamekit ui`): assets, sounds, music and art tabs in the browser | ✅ done |
 | 8 | Local AI engines: tested on an AMD RX 7800 XT (ROCm on Windows); **Pictures** tab with FLUX.2 klein (~8 s a take) | ✅ done |
 | 9 | **Music** engine: ACE-Step 1.5 on AMD (~1.5 s per second of music), AI takes on the Music tab, "use for a track" with loop cut | ✅ done |
-| 10 | Sound effects (Stable Audio 3) and voices (Qwen3-TTS) engines | next |
+| 10 | **Voices** tab (Qwen3-TTS, ~2x real time) and AI **sound effects** (Stable Audio 3; gated license, accepted once per person) | ✅ done |
 | 11 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
 
 ## Develop

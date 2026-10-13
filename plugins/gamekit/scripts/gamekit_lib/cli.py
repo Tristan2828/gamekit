@@ -161,6 +161,28 @@ def main(argv: list[str] | None = None) -> int:
     pic_use.add_argument("--no-palette", action="store_true", help="don't snap colors to the palette")
     pic_use.add_argument("--force", action="store_true", help="replace an existing asset file")
 
+    snd = commands.add_parser("sound", help="make sound effects from a description (sound engine) into sound-takes/")
+    snd.add_argument("prompt", help="e.g. \"a heavy wooden door slams shut in a stone hall\"")
+    snd.add_argument("--seconds", type=float, default=2.0, help="length (default 2)")
+    snd.add_argument("--takes", type=int, default=3, help="how many (default 3)")
+    snd.add_argument("--steps", type=int, default=8, help="detail (default 8)")
+    snd.add_argument("--seed", type=int, help="seed of the first take (default: random)")
+    snd.add_argument("--stereo", action="store_true", help="keep stereo (default mono)")
+    snd.add_argument("--loop", action="store_true", help="seamless loop (ambience: fire, wind, rain)")
+    voc = commands.add_parser("voice", help="read words aloud in a described voice (voice engine) into voice-takes/")
+    voc.add_argument("text", help="the words to say (up to 1,500 characters)")
+    voc.add_argument("--who", default="", help="the voice: age, man or woman, sound, accent, pace")
+    voc.add_argument("--tone", default="", help="how it's said: whispering, shouting, weary...")
+    voc.add_argument("--language", default="English")
+    voc.add_argument("--takes", type=int, default=2, help="how many (default 2)")
+    voc.add_argument("--seed", type=int, help="seed of the first take (default: random)")
+    take_use = commands.add_parser("take-use", help="make a sound or voice take a .wav asset (mono, trimmed; source: ai)")
+    take_use.add_argument("kind", choices=["sound", "voice"])
+    take_use.add_argument("take", help="file name in sound-takes/ or voice-takes/")
+    take_use.add_argument("asset", help="asset id (a .wav asset)")
+    take_use.add_argument("--match", help="match the loudness of this sound file (e.g. the one it replaces)")
+    take_use.add_argument("--force", action="store_true", help="replace an existing asset file")
+
     page = commands.add_parser("ui", help="open the asset page in a browser window (this PC only)")
     page.add_argument("--port", type=int, default=ui.DEFAULT_PORT, help=f"port (default: {ui.DEFAULT_PORT})")
     page.add_argument("--no-window", action="store_true", help="don't open a window; just print the address")
@@ -171,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
                 "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
                 "sfx": _sfx, "music": _music, "ui": _ui, "engines": _engines, "picture": _picture,
-                "picture-use": _picture_use}
+                "picture-use": _picture_use, "sound": _sound, "voice": _voice, "take-use": _take_use}
     try:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
@@ -726,6 +748,55 @@ def _picture_use(args: argparse.Namespace) -> int:
                                      snap=not args.no_palette)
     manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
     print(f"{asset.id}: {args.picture} -> {asset.file} (source: ai)")
+    for problem in problems:
+        print(f"  - {problem}")
+    return 0
+
+
+def _ai_takes(loaded: manifest.Manifest, kind: str, request: dict, takes: int, seed: int | None, describe: str) -> int:
+    worker = engines.worker(kind)
+    try:
+        for take in range(max(1, takes)):
+            used = seed + take if seed is not None else random.randrange(1, 2**31 - 1)
+            out = made.new_path(loaded, kind, describe, used)
+            answer = worker.ask(request | {"out": str(out), "seed": used}, lambda s: print(f"  {s}", flush=True))
+            made.record(out, request | {"seed": answer.get("seed", used), "seconds": answer.get("seconds")})
+            print(f"wrote {out.relative_to(loaded.root).as_posix()} ({answer.get('seconds')} s, seed {used})", flush=True)
+    finally:
+        worker.stop()
+    return 0
+
+
+def _sound(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    request = {"prompt": args.prompt, "seconds": max(0.5, min(30.0, args.seconds)), "steps": args.steps,
+               "mono": not args.stereo, "loop": args.loop, "model": "Stable Audio 3 Small SFX"}
+    return _ai_takes(loaded, "sound", request, args.takes, args.seed, args.prompt)
+
+
+def _voice(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    if len(args.text) > 1500:
+        raise engines.EngineError("up to 1,500 characters a reading; split longer text")
+    request = {"text": args.text, "who": args.who, "tone": args.tone, "language": args.language,
+               "model": "Qwen3-TTS 1.7B VoiceDesign"}
+    return _ai_takes(loaded, "voice", request, args.takes, args.seed, args.text)
+
+
+def _take_use(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    asset = _asset(loaded, args.asset)
+    out = loaded.asset_path(asset)
+    if out.suffix.lower() != ".wav":
+        raise audio.AudioError(f"{asset.id}'s file is {asset.file}; sounds and voices become .wav assets")
+    if out.exists() and not args.force:
+        raise audio.AudioError(f"{out} already exists; add --force to replace it")
+    source = made.path_of(loaded, args.kind, args.take)
+    problems = pipeline.clean_into(loaded, asset, source, do_trim=not made.read_meta(source).get("loop"),
+                                   match=args.match)
+    manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
+    print(f"{asset.id}: {args.take} -> {asset.file} (source: ai)")
+    _print_info(asset.id, out)
     for problem in problems:
         print(f"  - {problem}")
     return 0

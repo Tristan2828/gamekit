@@ -632,7 +632,101 @@ def do_use_music(loaded: manifest.Manifest, body: dict) -> dict:
     return {"problems": problems, "message": f"{a.id} now uses {body.get('name')} (source: ai). {note}".strip()}
 
 
+# --- AI sound and voice takes (shared: list, keep, remove, use) -----------------------------------------
+
+def _take_kind(body: dict) -> str:
+    kind = str(body.get("kind", ""))
+    if kind not in ("sound", "voice"):
+        raise UserError("kind must be sound or voice")
+    return kind
+
+
+def do_takes_list(loaded: manifest.Manifest, body: dict) -> dict:
+    kind = _take_kind(body)
+    items = [item | {"url": file_url(loaded.root, made.folder(loaded, kind) / item["name"])}
+             for item in made.list_all(loaded, kind)]
+    return {"takes": items, "engine": engines.status(engines.get(kind))}
+
+
+def do_takes_keep(loaded: manifest.Manifest, body: dict) -> dict:
+    made.keep(loaded, _take_kind(body), str(body.get("name", "")), bool(body.get("kept", True)))
+    return {"message": ""}
+
+
+def do_takes_remove(loaded: manifest.Manifest, body: dict) -> dict:
+    kind = _take_kind(body)
+    made.remove(loaded, kind, str(body.get("name", "")))
+    return {"message": f"moved to {made.KINDS[kind][0]}/_removed"}
+
+
+def do_takes_use(loaded: manifest.Manifest, body: dict) -> dict:
+    """A sound or voice take becomes a .wav asset: mono 16-bit, trimmed (not for loops), at the game's peak
+    level or matched to the sound it replaces."""
+    kind = _take_kind(body)
+    a = find(loaded, str(body.get("id", "")))
+    out = loaded.asset_path(a)
+    if out.suffix.lower() != ".wav":
+        raise UserError(f"{a.id}'s file is {a.file}; sounds and voices become .wav assets")
+    _overwrite_guard(out, body)
+    source = made.path_of(loaded, kind, str(body.get("name", "")))
+    loop = bool(made.read_meta(source).get("loop"))
+    match = upload_path(str(body["match"])) if body.get("match") else None
+    problems = pipeline.clean_into(loaded, a, source, do_trim=not loop, match=match,
+                                   max_seconds=_number(body, "max_seconds"))
+    manifest.set_fields(loaded.path, a.id, {"source": "ai"} | ({"status": "draft"} if a.status == "todo" else {}))
+    return {"problems": problems, "message": f"{a.id} now uses {source.name} (source: ai)"}
+
+
+def _make_takes(loaded: manifest.Manifest, kind: str, label: str, request: dict, takes: int,
+                fixed_seed: float | None, describe: str) -> dict:
+    if not engines.is_installed(engines.get(kind)):
+        raise UserError(f"the {kind} engine isn't set up yet: press Set up on its tab")
+
+    def work(job: Job) -> dict:
+        done = []
+        for take in range(takes):
+            if job.cancel:
+                break
+            seed = int(fixed_seed) + take if fixed_seed is not None else random.randrange(1, 2**31 - 1)
+            out = made.new_path(loaded, kind, describe, seed)
+            prefix = f"take {take + 1} of {takes}: " if takes > 1 else ""
+
+            def on_step(text: str) -> None:
+                job.step = prefix + text
+
+            answer = engines.worker(kind).ask(request | {"out": str(out), "seed": seed}, on_step)
+            made.record(out, request | {"seed": answer.get("seed", seed), "seconds": answer.get("seconds")})
+            done.append(out.name)
+        return {"made": done, "message": f"made {len(done)} take{'s' if len(done) != 1 else ''}"}
+
+    start_job(label, work)
+    return {"message": ""}
+
+
+def do_make_sounds(loaded: manifest.Manifest, body: dict) -> dict:
+    prompt = str(body.get("prompt", "")).strip()
+    if not prompt:
+        raise UserError("describe the sound first")
+    seconds = _number(body, "seconds") or 2.0
+    request = {"prompt": prompt, "seconds": max(0.5, min(30.0, seconds)), "steps": _clamp(body, "steps", 8, 4, 50),
+               "mono": bool(body.get("mono", True)), "loop": bool(body.get("loop")), "model": "Stable Audio 3 Small SFX"}
+    return _make_takes(loaded, "sound", "Sounds", request, _clamp(body, "takes", 3, 1, 8), _number(body, "seed"), prompt)
+
+
+def do_make_voices(loaded: manifest.Manifest, body: dict) -> dict:
+    text = str(body.get("text", "")).strip()
+    if not text:
+        raise UserError("write the words to say first")
+    if len(text) > 1500:
+        raise UserError("up to 1,500 characters a reading; split longer text")
+    request = {"text": text, "who": str(body.get("who", "")).strip(), "tone": str(body.get("tone", "")).strip(),
+               "language": str(body.get("language", "") or "English"), "model": "Qwen3-TTS 1.7B VoiceDesign"}
+    return _make_takes(loaded, "voice", "Voices", request, _clamp(body, "takes", 2, 1, 6), _number(body, "seed"), text)
+
+
 POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
+    "/api/takes": do_takes_list, "/api/takes/keep": do_takes_keep, "/api/takes/remove": do_takes_remove,
+    "/api/takes/use": do_takes_use, "/api/sounds/make": do_make_sounds, "/api/voices/make": do_make_voices,
     "/api/musictakes": do_music_takes, "/api/musictakes/make": do_make_music, "/api/musictakes/keep": do_keep_music,
     "/api/musictakes/remove": do_remove_music, "/api/musictakes/use": do_use_music,
     "/api/job": do_job, "/api/cancel": do_cancel, "/api/engines/setup": do_engine_setup,
@@ -647,7 +741,8 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
 }
 # these don't wait for a running action (jobs run in the background and only take the job slot)
 READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate", "/api/job", "/api/cancel", "/api/pictures",
-             "/api/engines/setup", "/api/pictures/make", "/api/musictakes", "/api/musictakes/make"}
+             "/api/engines/setup", "/api/pictures/make", "/api/musictakes", "/api/musictakes/make", "/api/takes",
+             "/api/sounds/make", "/api/voices/make"}
 
 
 # --- the server ------------------------------------------------------------------------------------

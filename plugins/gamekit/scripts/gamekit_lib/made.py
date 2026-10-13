@@ -1,6 +1,6 @@
 """Files the AI engines make for a game, before any of them becomes an asset.
 
-Each kind has its own folder next to assets.yaml (pictures/, music-takes/). Every file has a .json beside it
+Each kind has its own folder next to assets.yaml (pictures/, music-takes/, sound-takes/, voice-takes/). Every file has a .json beside it
 holding what made it (description, seed, settings), so a take can be remade or adjusted. Removed files move
 to <folder>/_removed/ rather than being deleted.
 """
@@ -14,7 +14,8 @@ from pathlib import Path
 
 from .manifest import Manifest
 
-KINDS = {"picture": ("pictures", ".png"), "music": ("music-takes", ".wav")}
+KINDS = {"picture": ("pictures", ".png"), "music": ("music-takes", ".wav"), "sound": ("sound-takes", ".wav"),
+         "voice": ("voice-takes", ".wav")}
 
 
 class MadeError(Exception):

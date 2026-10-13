@@ -19,6 +19,7 @@ KINDS = {
     "ui": ({".png"}, True),
     "font": ({".png", ".ttf", ".otf"}, False),
     "sfx": ({".wav"}, False),
+    "voice": ({".wav"}, False),
     "music": ({".ogg"}, False),
 }
 SOURCES = {

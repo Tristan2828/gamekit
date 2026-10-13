@@ -68,6 +68,22 @@ current sound) or `sfx variants <id> --preset <name>` (fresh takes), ask them to
 `sounds/variants/<id>_*.wav`, then keep their pick with `sfx new <id> --from ... --force`.
 Delete `sounds/variants/` once they've chosen.
 
+## AI sound effects on the user's PC (`source: ai`)
+
+```
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" engines setup sound        # once per PC; ask first
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" sound "<description>" [--seconds 2] [--takes 3] [--loop] [--stereo]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" take-use sound <take.wav> <id> [--match old.wav] [--force]
+```
+
+Stable Audio 3 Small SFX makes realistic sounds from a description ("a heavy wooden door slams shut in a stone
+hall"); sfxr stays the tool for retro bleeps. Its license (Stability AI Community: free, also commercially
+under $1M a year in revenue) is **gated**: the user accepts it once on Hugging Face, and the model then
+downloads on first use after `hf auth login` (or is placed in `engines/hf`). Never accept it for them.
+Takes go to `sound-takes/`; mono by default; `--loop` makes a seamless loop for ambience (not trimmed).
+Let the user listen (Sounds tab, **AI sounds**) and pick; `take-use` then cleans it into the asset's WAV like
+`sfx clean` (use `--match` with the sound it replaces) and sets `source: ai`.
+
 ## Downloaded sounds (`source: library`)
 
 1. Only use sounds whose license the user has checked (Freesound: filter by CC0; Kenney, Sonniss

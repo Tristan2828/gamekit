@@ -1,8 +1,8 @@
 {
   "name": "gamekit",
   "displayName": "Gamekit",
-  "version": "0.11.0",
-  "description": "Plan, make and track a game's art and audio assets: an asset manifest, Claude-drawn pixel art, Aseprite export, asset pack import with license tracking, sfxr sound effects and sound clean-up, looping music (Godot rendering or imported files), palette checks, credits, a browser asset page (gamekit ui), and local AI pictures and music on your own graphics card.",
+  "version": "0.12.0",
+  "description": "Plan, make and track a game's art and audio assets: an asset manifest, Claude-drawn pixel art, Aseprite export, asset pack import with license tracking, sfxr sound effects and sound clean-up, looping music (Godot rendering or imported files), palette checks, credits, a browser asset page (gamekit ui), and local AI pictures, music, sound effects and voices on your own graphics card.",
   "author": { "name": "Tristan2828" },
   "repository": "https://github.com/Tristan2828/gamekit",
   "keywords": ["gamedev", "pixel-art", "assets", "aseprite", "sfx", "godot"]

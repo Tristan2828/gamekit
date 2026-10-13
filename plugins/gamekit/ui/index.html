@@ -98,7 +98,7 @@
   .tile .buttons button { font-size: 12.5px; padding: 3px 9px; }
   .empty { color: var(--dim); padding: 30px 0; text-align: center; }
   .tab { display: none; }
-  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures { display: block; }
+  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures, body[data-tab=voices] .tab.voices { display: block; }
   textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
   .pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
   .pic img.shot { width: 100%; border-radius: 6px; display: block; background: #0b0e0d; cursor: zoom-in; }
@@ -122,7 +122,7 @@
   <h1>gamekit</h1><span class="version" id="version" title="gamekit version"></span><span class="sub">art and audio for your game, on this PC</span>
   <div class="game"><span>Game</span><b id="gameName">…</b><button id="openFolder" title="Open the game's folder">Folder</button><button id="refresh" title="Read assets.yaml again">Refresh</button></div>
   <nav>
-    <button data-tab="assets" class="on">Assets</button><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="art">Art</button><button data-tab="pictures">Pictures</button>
+    <button data-tab="assets" class="on">Assets</button><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="art">Art</button><button data-tab="pictures">Pictures</button><button data-tab="voices">Voices</button>
   </nav>
 </header>
 <div id="status"><div class="top"><span id="statusText"></span><span><button id="statusStop">Stop</button> <button id="statusClose">Close</button></span></div><div class="bar" id="statusBar"><div></div></div><ul id="statusList"></ul></div>
@@ -148,6 +148,24 @@
       <h2>Sound effect</h2>
       <select id="sfxPick"></select>
       <div class="card" id="sfxCurrent" style="margin-top:10px"></div>
+      <div id="soundSetup" style="display:none">
+        <h2 class="gap">Make a sound with AI</h2>
+        <div class="hint" id="soundEngineInfo"></div>
+        <button class="primary" id="setupSound">Set up the sound engine</button>
+      </div>
+      <div id="soundForm" style="display:none">
+        <h2 class="gap">Make a sound with AI</h2>
+        <div class="hint" id="soundNote" style="margin-bottom:8px"></div>
+        <textarea id="sPrompt" style="min-height:70px" placeholder="e.g. a heavy wooden door slams shut in a stone hall"></textarea>
+        <div class="chips" id="aiSoundChips"></div>
+        <div class="row3"><div><label for="sSeconds">Seconds</label><input type="number" id="sSeconds" min="0.5" max="30" step="0.5" value="2"></div>
+          <div><label for="sTakes">Takes</label><input type="number" id="sTakes" min="1" max="8" value="3"></div>
+          <div><label for="sSeed">Seed</label><input type="number" id="sSeed" placeholder="random"></div></div>
+        <label class="check"><input type="checkbox" id="sMono" checked> Mono (a sound from a place in the world)</label>
+        <label class="check"><input type="checkbox" id="sLoop"> Seamless loop (fire, wind, rain...)</label>
+        <button class="primary" id="makeSounds">Make it</button>
+        <div class="hint" style="margin-top:8px">Listen under <b>AI sounds</b> (right), then <b>Use as asset…</b>. Or keep using the retro generator below.</div>
+      </div>
       <h2 class="gap">New takes from a preset</h2>
       <div class="chips" id="presetChips"></div>
       <div class="row"><div><label for="takeCount">Takes</label><input type="number" id="takeCount" min="1" max="12" value="4"></div><div></div></div>
@@ -249,15 +267,39 @@
         <div class="hint" id="pictureHint" style="margin-top:10px"></div>
       </div>
     </div>
+    <div class="tab voices">
+      <div id="voiceSetup" style="display:none">
+        <h2>Set up the voice engine</h2>
+        <div class="hint" id="voiceEngineInfo"></div>
+        <button class="primary" id="setupVoice">Set up</button>
+      </div>
+      <div id="voiceForm" style="display:none">
+        <h2>Words to say</h2>
+        <textarea id="vText" maxlength="1500" placeholder="Only the words, e.g. The fire is low, traveller. Rest a while."></textarea>
+        <div class="hint" id="vCount">0 / 1500</div>
+        <label for="vWho">Voice: who is speaking</label>
+        <textarea id="vWho" style="min-height:60px" placeholder="Age, man or woman, the sound of the voice, accent, pace"></textarea>
+        <div class="chips" id="voiceChips"></div>
+        <label for="vTone">Tone or scene: how it's said</label>
+        <textarea id="vTone" style="min-height:50px" placeholder="Whispering, shouting across a field, weary, amused..."></textarea>
+        <div class="row3"><div><label for="vLanguage">Language</label><select id="vLanguage"><option>English</option><option>Chinese</option><option>Japanese</option><option>Korean</option><option>German</option><option>French</option><option>Russian</option><option>Portuguese</option><option>Spanish</option><option>Italian</option></select></div>
+          <div><label for="vTakes">Takes</label><input type="number" id="vTakes" min="1" max="6" value="2"></div>
+          <div><label for="vSeed">Seed</label><input type="number" id="vSeed" placeholder="random"></div></div>
+        <button class="primary" id="makeVoices">Make it</button>
+        <div class="hint" style="margin-top:8px">Each take is a different reading; keep the best. The same Voice text gives a similar voice, not an
+          identical one: for a character with many lines, reuse a good take's seed and keep the Voice text exactly the same.</div>
+      </div>
+    </div>
   </section>
 
   <!-- ===== right column ===== -->
   <section>
     <div class="tab assets"><h2 id="assetTitle">Assets</h2><div id="assetList"><div class="empty">Loading…</div></div></div>
-    <div class="tab sounds"><h2>Takes <button id="clearTakes" style="float:right;font-size:12px;text-transform:none;letter-spacing:0">Clear takes</button></h2><div id="takeList"></div></div>
+    <div class="tab sounds"><h2 id="aiSoundTitle">AI sounds</h2><div id="aiSoundList"></div><h2 class="gap">Retro takes (sfxr) <button id="clearTakes" style="float:right;font-size:12px;text-transform:none;letter-spacing:0">Clear takes</button></h2><div id="takeList"></div></div>
     <div class="tab music"><h2 id="takeTitle">AI takes</h2><div id="musicTakes"></div><h2 class="gap">Every track</h2><div id="musicList"></div></div>
     <div class="tab art"><h2 id="artTitle">Images</h2><div class="gallery" id="gallery"></div></div>
     <div class="tab pictures"><h2 id="picTitle">Pictures</h2><div class="pics" id="picList"></div></div>
+    <div class="tab voices"><h2 id="voiceTitle">Readings</h2><div id="voiceList"></div></div>
   </section>
 </main>
 <div id="bigPic"><img alt=""></div>
@@ -339,7 +381,8 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => setTab(b.
 function renderAll() {
   const tab = document.body.dataset.tab;
   if (tab === 'assets') renderAssets();
-  if (tab === 'sounds') renderSounds();
+  if (tab === 'sounds') { renderSounds(); renderAiSounds(); }
+  if (tab === 'voices') renderVoices();
   if (tab === 'music') { renderMusic(); renderMusicTakes(); }
   if (tab === 'art') renderArt();
   if (tab === 'pictures') renderPictures();
@@ -782,6 +825,123 @@ $('setupMusic').onclick = () => startJob('/api/engines/setup', { name: 'music' }
 $('makeMusic').onclick = () => startJob('/api/musictakes/make', {
   prompt: $('mPrompt').value, seconds: +$('mSeconds').value, bpm: $('mBpm').value, key: $('mKey').value,
   takes: +$('mTakes').value || 1, lyrics: $('mLyrics').value, planner: $('mPlanner').checked, seed: $('mSeed').value });
+
+// ---------- AI sound and voice takes (shared list) ----------
+const takeState = {};   // kind -> last list
+function engineBlock(kind, setupId, formId, infoId) {
+  const engine = S.engines && S.engines[kind];
+  const ready = engine && engine.installed;
+  $(setupId).style.display = ready ? 'none' : 'block';
+  $(formId).style.display = ready ? 'block' : 'none';
+  if (engine) $(infoId).innerHTML = `Made on this PC with ${esc(engine.model)} (${esc(engine.license)}). ` +
+    `Setting up installs it for your graphics card into <code>${esc(engine.folder)}</code> (a few GB, several minutes).` +
+    (engine.note ? `<br><b>First:</b> ${esc(engine.note)}` : '');
+}
+async function renderTakes(kind, listId, titleId, title, assetKinds, fill) {
+  const data = await api('/api/takes', { kind }, true);
+  if (!data) return;
+  takeState[kind] = data.takes;
+  const targets = S.assets.filter(a => assetKinds.includes(a.kind) && a.file.toLowerCase().endsWith('.wav'));
+  const options = targets.map(a => option(a.id, `${a.id} (${a.kind}, ${a.status})`, false)).join('');
+  $(titleId).textContent = `${title} (${data.takes.length})`;
+  $(listId).innerHTML = data.takes.length ? data.takes.map(t => {
+    const m = t.meta || {};
+    const said = kind === 'voice' ? `“${esc(m.text)}”` : esc(m.prompt);
+    const who = kind === 'voice' ? `<div class="hint">${esc([m.who, m.tone].filter(Boolean).join(' · '))}</div>` : '';
+    return `<div class="card${m.kept ? ' kept' : ''}">
+      <h3>${m.kept ? '★ ' : ''}<span style="font-weight:400">${said}</span></h3>${who}
+      <div class="meta">${m.seconds ?? '?'} s · seed ${esc(m.seed)}${m.loop ? ' · seamless loop' : ''}${m.mono === false ? ' · stereo' : ''} · ${esc(m.made || '')}</div>
+      <audio controls preload="none" src="${t.url}"${m.loop ? ' loop' : ''}></audio>
+      <div class="buttons">
+        <button data-tkeep="${esc(t.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
+        <button data-tagain="${esc(t.name)}" title="Same settings, new seed">Another take</button>
+        <button data-tadjust="${esc(t.name)}" title="Put its settings back in the form">Adjust</button>
+        <button data-tuseopen="${esc(t.name)}">Use as asset…</button>
+        <button data-tremove="${esc(t.name)}">Remove</button>
+      </div>
+      <div class="use" id="tuse-${kind}-${esc(t.name)}">
+        ${targets.length ? `<select>${options}</select>` : `<div class="hint">No ${assetKinds.join(' or ')} assets with a .wav file in assets.yaml yet.</div>`}
+        <div class="buttons"><button data-tuse="${esc(t.name)}">Use</button></div>
+        <div class="hint">Made into the asset's WAV: mono, 16-bit, trimmed${kind === 'sound' ? ' (not seamless loops)' : ''}, at the game's level.</div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">Nothing yet.</div>';
+  const box = $(listId);
+  const meta = n => data.takes.find(t => t.name === n).meta;
+  const make = kind === 'voice' ? '/api/voices/make' : '/api/sounds/make';
+  box.querySelectorAll('[data-tkeep]').forEach(b => b.onclick = async () => {
+    if (await api('/api/takes/keep', { kind, name: b.dataset.tkeep, kept: b.dataset.kept !== '1' }, true)) renderAll(); });
+  box.querySelectorAll('[data-tremove]').forEach(b => b.onclick = async () => {
+    if (await api('/api/takes/remove', { kind, name: b.dataset.tremove })) renderAll(); });
+  box.querySelectorAll('[data-tagain]').forEach(b => b.onclick = () => startJob(make, { ...meta(b.dataset.tagain), takes: 1, seed: null }));
+  box.querySelectorAll('[data-tadjust]').forEach(b => b.onclick = () => fill(meta(b.dataset.tadjust)));
+  box.querySelectorAll('[data-tuseopen]').forEach(b => b.onclick = () =>
+    document.getElementById(`tuse-${kind}-${b.dataset.tuseopen}`).classList.toggle('open'));
+  box.querySelectorAll('[data-tuse]').forEach(b => b.onclick = async () => {
+    const panel = document.getElementById(`tuse-${kind}-${b.dataset.tuse}`);
+    const select = panel.querySelector('select');
+    if (!select) return;
+    if (await api('/api/takes/use', { kind, name: b.dataset.tuse, id: select.value })) load();
+  });
+}
+
+// Sounds tab: AI sound effects
+const SOUND_WORDS = ['heavy', 'light', 'close', 'distant', 'sharp', 'dull', 'wet', 'metallic', 'wooden', 'in a cave', 'outdoors', 'single, no repeats'];
+$('aiSoundChips').innerHTML = SOUND_WORDS.map(w => `<button data-sw="${esc(w)}">${esc(w)}</button>`).join('');
+$('aiSoundChips').querySelectorAll('button').forEach(b => b.onclick = () => {
+  const box = $('sPrompt');
+  if (!box.value.includes(b.dataset.sw)) box.value = (box.value.trim() ? box.value.trim().replace(/[,.]?$/, ', ') : '') + b.dataset.sw;
+  box.focus();
+});
+function fillSound(m) {
+  $('sPrompt').value = m.prompt || '';
+  $('sSeconds').value = m.loop ? Math.max(1, (m.seconds || 2)) : (m.seconds || 2);
+  $('sMono').checked = m.mono !== false;
+  $('sLoop').checked = !!m.loop;
+  $('sSeed').value = m.seed ?? '';
+  $('sPrompt').focus();
+}
+async function renderAiSounds() {
+  engineBlock('sound', 'soundSetup', 'soundForm', 'soundEngineInfo');
+  const engine = S.engines && S.engines.sound;
+  $('soundNote').innerHTML = engine && engine.note && !engine.model_ready ? '<b>Before the first sound:</b> ' + esc(engine.note) : '';
+  await renderTakes('sound', 'aiSoundList', 'aiSoundTitle', 'AI sounds', ['sfx'], fillSound);
+}
+$('setupSound').onclick = () => startJob('/api/engines/setup', { name: 'sound' });
+$('makeSounds').onclick = () => startJob('/api/sounds/make', {
+  prompt: $('sPrompt').value, seconds: +$('sSeconds').value || 2, takes: +$('sTakes').value || 3,
+  mono: $('sMono').checked, loop: $('sLoop').checked, seed: $('sSeed').value });
+
+// Voices tab
+const VOICES = {
+  narrator: ['An old storyteller, male, deep warm voice, unhurried, clear diction, a slight English accent.', 'Telling a tale by a fire late at night, calm and grave.'],
+  innkeeper: ['A middle-aged innkeeper, female, hearty and a little hoarse, rural accent.', 'Friendly and busy, talking over the noise of a full room.'],
+  villain: ['A cold, cultured man in his fifties, low smooth voice, precise and slow.', 'Quietly menacing, amused, never raising his voice.'],
+  hero: ['A young adventurer, determined, clear bright voice.', 'Shouting a battle cry across a field.'],
+  creature: ['A huge ancient creature, very deep rumbling voice, slow.', 'Echoing in a vast cave, threatening.'],
+  child: ['A curious young girl, about ten, light quick voice.', 'Excited, whispering a secret.'],
+};
+$('voiceChips').innerHTML = Object.keys(VOICES).map(k => `<button data-voice="${k}">${k}</button>`).join('');
+$('voiceChips').querySelectorAll('button').forEach(b => b.onclick = () => {
+  [$('vWho').value, $('vTone').value] = VOICES[b.dataset.voice];
+});
+function fillVoice(m) {
+  $('vText').value = m.text || '';
+  $('vWho').value = m.who || '';
+  $('vTone').value = m.tone || '';
+  $('vLanguage').value = m.language || 'English';
+  $('vSeed').value = m.seed ?? '';
+  $('vText').focus();
+}
+async function renderVoices() {
+  engineBlock('voice', 'voiceSetup', 'voiceForm', 'voiceEngineInfo');
+  await renderTakes('voice', 'voiceList', 'voiceTitle', 'Readings', ['voice', 'sfx'], fillVoice);
+}
+$('setupVoice').onclick = () => startJob('/api/engines/setup', { name: 'voice' });
+$('makeVoices').onclick = () => startJob('/api/voices/make', {
+  text: $('vText').value, who: $('vWho').value, tone: $('vTone').value, language: $('vLanguage').value,
+  takes: +$('vTakes').value || 2, seed: $('vSeed').value });
+$('vText').oninput = () => { $('vCount').textContent = `${$('vText').value.length} / 1500`; };
 
 // ---------- dropping files ----------
 function dropZone(el, key, label) {

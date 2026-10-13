@@ -50,6 +50,9 @@ class Engine:
     code: tuple[str, str] | None = None     # (git URL, commit): the model's own code, kept in engines/code/<name>
     requirements: dict[str, str] = field(default_factory=dict)  # PyTorch kind ("rocm"/"cuda"/"cpu"/"*") -> file in code
     env: dict[str, str] = field(default_factory=dict)  # extra settings for its worker
+    install_code: bool = False  # pip-install the code itself without its dependencies (they pin CUDA PyTorch)
+    note: str = ""              # anything the person must do first, e.g. accept a license
+    hf_repos: list[str] = field(default_factory=list)  # models it loads through the Hugging Face cache (engines/hf)
 
 
 ENGINES = {
@@ -67,6 +70,20 @@ ENGINES = {
         requirements={"rocm": "requirements-rocm.txt", "*": "requirements.txt"},
         # from ACE-Step's own ROCm launchers: plain PyTorch planner (no flash-attn), no torch.compile
         env={"ACESTEP_LM_BACKEND": "pt", "TORCH_COMPILE_BACKEND": "eager", "TOKENIZERS_PARALLELISM": "false"}),
+    "voice": Engine(
+        "voice", "Voices", "voice_worker.py", ["qwen-tts==0.1.1", "soundfile"],
+        "Qwen3-TTS 1.7B VoiceDesign by Alibaba Qwen, about 4 GB on first use", "Apache 2.0",
+        ["Qwen3-TTS-12Hz-1.7B-VoiceDesign"]),
+    "sound": Engine(
+        "sound", "Sounds", "sound_worker.py",
+        ["einops-exts>=0.0.4", "einops>=0.8.2", "huggingface-hub>=1.7.1", "numpy", "packaging", "safetensors",
+         "soundfile", "tqdm", "transformers==5.8.0"],
+        "Stable Audio 3 Small SFX by Stability AI, about 3.5 GB on first use",
+        "Stability AI Community License (free, also commercially under $1M a year in revenue)",
+        code=("https://github.com/Stability-AI/stable-audio-3.git", "af60ef53ff9b2074719ee23d89c44aa433d0c55b"),
+        install_code=True, hf_repos=["stabilityai/stable-audio-3-small-sfx"],
+        note="The model is gated: accept its license once at huggingface.co/stabilityai/stable-audio-3-small-sfx, "
+             "then sign in on this PC (`hf auth login`, a Read token) so the first sound can download it."),
 }
 
 
@@ -114,7 +131,9 @@ def is_installed(engine: Engine) -> bool:
 
 
 def has_model(engine: Engine) -> bool:
-    return all(any((models_dir() / d).iterdir()) if (models_dir() / d).is_dir() else False for d in engine.model_dirs)
+    folders = [models_dir() / d for d in engine.model_dirs]
+    folders += [home() / "hf" / "hub" / ("models--" + repo.replace("/", "--")) / "snapshots" for repo in engine.hf_repos]
+    return all(folder.is_dir() and any(folder.iterdir()) for folder in folders)
 
 
 def status(engine: Engine) -> dict:
@@ -127,6 +146,7 @@ def status(engine: Engine) -> dict:
             info = {}
     return {"name": engine.name, "title": engine.title, "installed": is_installed(engine), "model": engine.model,
             "license": engine.license, "model_ready": has_model(engine), "torch": info.get("torch", ""),
+            "note": engine.note,
             "folder": str(venv(engine))}
 
 
@@ -214,6 +234,8 @@ def setup(name: str, run: Callable[[list[str]], None] | None = None) -> Iterator
     if requirements:
         run([uv, "pip", "install", "--python", py, "-r", str(code_dir(engine) / requirements)])
     run([uv, "pip", "install", "--python", py, *engine.packages])
+    if engine.install_code:
+        run([uv, "pip", "install", "--python", py, "--no-deps", "-e", str(code_dir(engine))])
     yield "Checking that it works"
     check = subprocess.run([py, "-c", "import torch, json; print(json.dumps([torch.__version__, torch.cuda.is_available()]))"],
                            capture_output=True, text=True, timeout=600)

@@ -86,6 +86,22 @@ The **todo / draft / done** buttons under every asset change its status straight
 
 **Takes similar to the current sound** works once a sound has been kept: small changes to it.
 
+### Making a sound with AI
+
+**Make a sound with AI** (left) makes realistic sound effects from a description, on your graphics card, with
+Stable Audio 3. It's free to use, also in games you sell while you earn under $1M a year from them.
+
+**Once, before the first sound:** the model is locked until you accept its license:
+1. Make a free account at https://huggingface.co/join (or sign in).
+2. Open https://huggingface.co/stabilityai/stable-audio-3-small-sfx and press **Agree**.
+3. Then let the model reach this PC: ask Claude to set it up, or run `hf auth login` with a Read token from
+   https://huggingface.co/settings/tokens so the first sound can download it (3.5 GB).
+
+Then: describe the sound (the word buttons add things like *heavy*, *distant*, *in a cave*), set the length and
+takes, tick **Mono** for sounds from a place in the world and **Seamless loop** for fire, wind and rain, and press
+**Make it**. Listen under **AI sounds** (right); **Use as asset…** turns one into a game sound (cleaned like an
+imported sound) and marks it `source: ai`.
+
 ### Using a downloaded sound instead
 
 1. Drop the file (`.wav`, `.mp3`, `.ogg`, `.flac`) on **Or import a sound file**, or click it to choose.
@@ -142,6 +158,20 @@ first for better structure, but takes about 7 minutes a take on your AMD card an
   **Draw** to turn it into the PNG.
 - **Export** (for `self` assets): turns your Aseprite file into the PNG. Needs Aseprite.
 - **Check** / **Check the images**: size and palette problems, listed at the top.
+
+## Voices tab: voice-overs made on your PC
+
+Spoken lines with Qwen3-TTS (Apache 2.0: free to use, also in games you sell). The first time, press **Set up**.
+
+1. **Words to say**: only the words. Up to 1,500 characters a reading; split anything longer.
+2. **Voice**: who is speaking. Age, man or woman, the sound of the voice, accent, pace. The buttons (narrator,
+   innkeeper, villain, hero, creature, child) fill in a voice and a tone to start from.
+3. **Tone or scene**: how it's said. Whispering, shouting across a field, weary, amused.
+4. **Make it**. Loading takes about 35 s; a short line takes a few seconds, a long one about 20.
+
+Each take is a different reading; keep the best. The same Voice text gives a *similar* voice, not an identical one:
+for a character with many lines, copy a good take's seed into **Seed** and keep the Voice text exactly the same.
+**Use as asset…** makes it a game sound (voice assets have `kind: voice` in assets.yaml; ask Claude to add them).
 
 ## Pictures tab: AI pictures made on your PC
 
