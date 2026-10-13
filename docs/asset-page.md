@@ -251,8 +251,9 @@ say only what changes (a pose button: **walk 1**, **walk 2**, **attack**, **wing
 2. Empty frames show the words they'll be made from ("...walking, left foot forward"). Change them if you like,
    then press **Make the missing frames**. Each one is made from your picture, then cut out (about 30 s each,
    plus loading the model the first time).
-3. The players at the bottom **play each animation** (idle, walk, attack) zoomed in and at real size. Use the
-   **Speed** slider. Don't like a frame? Pick another picture in its box, or choose "(none yet: make it)" and make
+3. The players at the bottom **play each animation** (idle, walk, attack) twice: zoomed in, to see every pixel,
+   and **in game**: at the size the game shows it (3× on a 1080p screen) on the floor color you pick under
+   **Floor**. Use the **Speed** slider. Don't like a frame? Pick another picture in its box, or choose "(none yet: make it)" and make
    it again.
 4. **Use all frames** saves every frame file at once. They're all shrunk with **the same crop**, so the creature
    stays in place and keeps its size from frame to frame (shrinking them one at a time would make it jitter).
@@ -286,6 +287,8 @@ sprites:
   prompt: "chunky, chibi proportions, oversized head, big glowing eyes, dark fantasy, ..."
   outline: "#17121C"                       # 1 px outline drawn around every sprite
   reserved_colors: ["#FF00FF", "#800080"]  # player colors: never snapped to
+  game_scale: 3                            # how much the game enlarges sprites (for "in game" previews)
+  floors: {The Crypt: "#1C1A21", ...}      # floor colors to preview sprites on
 ```
 
 ## Voices tab: AI voice-overs

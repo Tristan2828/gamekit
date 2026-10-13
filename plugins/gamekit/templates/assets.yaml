@@ -27,6 +27,8 @@ palette: palette.hex    # every image is checked against these colors
 #   prompt: "pixel art sprite, dark fantasy, front-facing, symmetrical, muted colors"  # starts picture descriptions
 #   outline: "#17121C"  # 1 px outline drawn around the sprite (inside its size)
 #   reserved_colors: ["#FF00FF", "#800080"]  # palette colors with a special meaning: never snapped to
+#   game_scale: 3       # how much the game enlarges sprites on screen (default 3), for "as in game" previews
+#   floors: {Dungeon: "#1C1A21"}  # floor colors sprites are seen on, for previews (default a dark grey)
 # audio:                # house levels used by sfx / music commands unless a flag overrides them
 #   sfx_peak_db: -1     # sound effect peak, dBFS
 #   music_lufs: -16     # music loudness, LUFS (unset: music render keeps the game's own mix)

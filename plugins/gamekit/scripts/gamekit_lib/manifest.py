@@ -196,9 +196,9 @@ HEX_PATTERN = re.compile(r"^#?[0-9a-fA-F]{6}$")
 
 def _sprite_rule_problems(rules: dict) -> list[str]:
     if rules.get("_bad"):
-        return ["sprites: must be a mapping (prompt, outline, reserved_colors)"]
+        return ["sprites: must be a mapping (prompt, outline, reserved_colors, game_scale, floors)"]
     problems = []
-    unknown = set(rules) - {"prompt", "outline", "reserved_colors"}
+    unknown = set(rules) - {"prompt", "outline", "reserved_colors", "game_scale", "floors"}
     if unknown:
         problems.append(f"sprites: unknown keys {sorted(unknown)}")
     if "prompt" in rules and not isinstance(rules["prompt"], str):
@@ -208,6 +208,12 @@ def _sprite_rule_problems(rules: dict) -> list[str]:
     reserved = rules.get("reserved_colors", [])
     if not (isinstance(reserved, list) and all(isinstance(c, str) and HEX_PATTERN.match(c) for c in reserved)):
         problems.append("sprites.reserved_colors: a list of colors like \"#FF00FF\"")
+    scale = rules.get("game_scale", 3)
+    if not (isinstance(scale, int) and not isinstance(scale, bool) and 1 <= scale <= 12):
+        problems.append(f"sprites.game_scale: a whole number from 1 to 12, got {scale!r}")
+    floors = rules.get("floors", {})
+    if not (isinstance(floors, dict) and all(isinstance(c, str) and HEX_PATTERN.match(c) for c in floors.values())):
+        problems.append("sprites.floors: names and colors, e.g. {The Crypt: \"#1C1A21\"}")
     return problems
 
 

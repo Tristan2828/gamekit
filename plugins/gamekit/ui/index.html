@@ -130,7 +130,8 @@
   #animPanel .player { text-align: center; font-size: 12px; color: var(--dim); }
   #animPanel .player img { image-rendering: pixelated; display: block; margin: 0 auto 4px;
     background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
-  #animPanel .player img.real { background: #14110f; margin-top: 6px; }
+  #animPanel .player .game { padding: 18px 24px; border-radius: 6px; margin-bottom: 4px; }
+  #animPanel .player .game img { background: none; margin: 0 auto; }
   .use .preview { display: flex; gap: 10px; align-items: flex-end; margin-top: 8px; min-height: 40px; }
   .use .preview img { image-rendering: pixelated; background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
   #bigPic { display: none; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.85); align-items: center; justify-content: center; cursor: zoom-out; }
@@ -936,8 +937,10 @@ function renderAnimation(changed) {
     <label class="check"><input type="checkbox" class="bg" checked> Remove the background</label>
     <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette</label>
     ${S.sprites && S.sprites.outline ? `<label class="check"><input type="checkbox" class="outline" checked> 1 px outline ${esc(S.sprites.outline)}</label>` : ''}
-    <label for="animFps">Speed <span id="animFpsText"></span></label>
-    <input type="range" id="animFps" min="1" max="12" value="${store.get('animFps', '5')}" style="width:220px;accent-color:var(--accent)">
+    <div class="row"><div><label for="animFps">Speed <span id="animFpsText"></span></label>
+      <input type="range" id="animFps" min="1" max="12" value="${store.get('animFps', '5')}" style="width:100%;accent-color:var(--accent)"></div>
+      <div><label for="animFloor">Floor (for "in game")</label><select id="animFloor">${Object.entries(floors()).map(([name, color]) =>
+        option(color, name, color === store.get('animFloor', ''))).join('')}</select></div></div>
     <div class="players" id="animPlayers"></div>`;
   panel.classList.add('open');
   panel.querySelectorAll('input[type=checkbox]').forEach(c => { if (c.className in keep) c.checked = keep[c.className]; });
@@ -947,6 +950,7 @@ function renderAnimation(changed) {
   panel.querySelectorAll('[data-slot]').forEach(sel => sel.onchange = () => { anim.slots[sel.dataset.slot] = sel.value; renderAnimation(true); });
   panel.querySelectorAll('[data-pose]').forEach(box => box.oninput = () => { anim.poses[box.dataset.pose] = box.value; });
   panel.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = previewAnimation);
+  $('animFloor').onchange = () => { store.set('animFloor', $('animFloor').value); playAnimation(); };
   $('animFps').oninput = () => { store.set('animFps', $('animFps').value); $('animFpsText').textContent = `${$('animFps').value} frames a second`; playAnimation(); };
   $('animMake').onclick = () => {
     const poses = {};
@@ -974,16 +978,23 @@ async function previewAnimation() {
   playAnimation();
 }
 
-// one player per animation (idle, walk, attack...), cycling through the frames that have a picture
+// the floors sprites are seen on (assets.yaml sprites: floors), and how much the game enlarges them
+const floors = () => (S.sprites && S.sprites.floors && Object.keys(S.sprites.floors).length) ? S.sprites.floors : { 'Dark floor': '#1C1C1C' };
+const gameScale = () => (S.sprites && S.sprites.game_scale) || 3;
+
+// one player per animation (idle, walk, attack...), cycling through the frames that have a picture: zoomed in to
+// see every pixel, and as in the game (its scale, on the floor)
 function playAnimation() {
   clearInterval(animTimer);
   const a = anim && S.assets.find(x => x.id === anim.id), players = $('animPlayers');
   if (!a || !players) return;
-  const [w, h] = animFrames._size || a.size, zoom = Math.max(2, Math.floor(120 / Math.max(w, h)));
+  const [w, h] = animFrames._size || a.size, zoom = Math.max(2, Math.floor(120 / Math.max(w, h))), scale = gameScale();
+  const floor = ($('animFloor') && $('animFloor').value) || Object.values(floors())[0];
   const groups = Object.entries(a.animations || {}).map(([name, frames]) => [name, frames.filter(f => animFrames[f])]).filter(([, f]) => f.length);
   players.innerHTML = groups.length ? groups.map(([name, frames]) => `<div class="player">
-      <img data-play="${esc(name)}" width="${w * zoom}" height="${h * zoom}" alt=""><img class="real" data-play="${esc(name)}" width="${w}" height="${h}" alt="">
-      ${esc(name)} (${frames.length} frame${frames.length > 1 ? 's' : ''})</div>`).join('')
+      <img data-play="${esc(name)}" width="${w * zoom}" height="${h * zoom}" alt="">
+      <div class="game" style="background:${esc(floor)}"><img data-play="${esc(name)}" width="${w * scale}" height="${h * scale}" alt=""></div>
+      ${esc(name)} (${frames.length} frame${frames.length > 1 ? 's' : ''}): zoomed ×${zoom}, in game ×${scale}</div>`).join('')
     : '<div class="hint">Choose or make pictures for the frames to see them move.</div>';
   let tick = 0;
   const show = () => {

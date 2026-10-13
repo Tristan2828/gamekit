@@ -358,11 +358,14 @@ class SpriteRulesTests(unittest.TestCase):
 
     def test_rules_are_valid_and_checked(self) -> None:
         self.assertEqual(manifest.validate(self.m, check_files=False), [])
-        bad = RULES_MANIFEST.replace('outline: "#17121C"', "outline: dark").replace("prompt:", "promt:")
+        bad = (RULES_MANIFEST.replace('outline: "#17121C"', "outline: dark\n  game_scale: 0\n  floors: {Crypt: grey}")
+               .replace("prompt:", "promt:"))
         (self.root / "assets.yaml").write_text(bad, encoding="utf-8")
         problems = " ".join(manifest.validate(manifest.load(self.root / "assets.yaml"), check_files=False))
         self.assertIn("sprites.outline", problems)
         self.assertIn("unknown keys ['promt']", problems)
+        self.assertIn("sprites.game_scale", problems)
+        self.assertIn("sprites.floors", problems)
 
     def test_outline_and_reserved_colors(self) -> None:
         sprite = pictures.make_sprite(self.m, self.ghoul, "ghoul-1.png")
