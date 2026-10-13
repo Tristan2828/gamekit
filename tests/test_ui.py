@@ -129,6 +129,8 @@ class ServerTests(unittest.TestCase):
         data = json.loads(body)
         self.assertEqual([a["id"] for a in data["assets"]], ["hero", "hit"])
         self.assertEqual(data["counts"], {"todo": 2, "draft": 0, "done": 0})
+        plugin = json.loads(ui.PLUGIN_JSON.read_text(encoding="utf-8"))
+        self.assertEqual(data["version"], plugin["version"])
         self.assertEqual(self.get("/")[0], 200)
 
     def test_status_change_writes_the_manifest(self) -> None:

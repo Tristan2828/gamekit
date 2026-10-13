@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from . import art, aseprite, audio, codeart, credits, manifest, music, packs, palette, pipeline, sfxr
 
 PAGE = Path(__file__).resolve().parent.parent.parent / "ui" / "index.html"
+PLUGIN_JSON = Path(__file__).resolve().parent.parent.parent / ".claude-plugin" / "plugin.json"
 UPLOADS = Path(tempfile.gettempdir()) / "gamekit-uploads"
 DEFAULT_PORT = 7862          # Hearthtone uses 7861
 MAX_UPLOAD = 300 * 1024 * 1024
@@ -44,6 +45,14 @@ class UserError(Exception):
 
 
 # --- reading the game ------------------------------------------------------------------------
+
+def version() -> str:
+    """gamekit's version, from the plugin manifest ("" if it can't be read)."""
+    try:
+        return str(json.loads(PLUGIN_JSON.read_text(encoding="utf-8")).get("version", ""))
+    except (OSError, ValueError, AttributeError):
+        return ""
+
 
 def file_url(root: Path, path: Path) -> str | None:
     """/file/... link for a file inside the game folder, with its modified time so the browser reloads changes."""
@@ -88,6 +97,7 @@ def state(loaded: manifest.Manifest) -> dict:
             counts[a.status] += 1
     return {
         "game": loaded.game or loaded.root.name,
+        "version": version(),
         "root": str(loaded.root.resolve()),
         "manifest": loaded.path.name,
         "frame_files": loaded.frame_files,

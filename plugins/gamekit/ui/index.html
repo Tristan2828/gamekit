@@ -16,6 +16,8 @@
   header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 18px 24px 6px; }
   h1 { margin: 0; font: 600 26px "Cascadia Mono", Consolas, monospace; color: var(--accent); letter-spacing: .5px; }
   header .sub { color: var(--dim); font-size: 13px; }
+  header .version { color: var(--accent); font: 12.5px "Cascadia Mono", Consolas, monospace; border: 1px solid var(--accent-dim); border-radius: 20px; padding: 0 8px; }
+  header .version:empty { display: none; }
   .game { display: flex; gap: 8px; align-items: center; margin-left: auto; color: var(--dim); font-size: 13px; }
   .game b { color: var(--text); font-size: 15px; }
   nav { display: flex; gap: 6px; flex-basis: 100%; margin-top: 6px; }
@@ -102,7 +104,7 @@
 </head>
 <body data-tab="assets">
 <header>
-  <h1>gamekit</h1><span class="sub">art and audio for your game, on this PC</span>
+  <h1>gamekit</h1><span class="version" id="version" title="gamekit version"></span><span class="sub">art and audio for your game, on this PC</span>
   <div class="game"><span>Game</span><b id="gameName">…</b><button id="openFolder" title="Open the game's folder">Folder</button><button id="refresh" title="Read assets.yaml again">Refresh</button></div>
   <nav>
     <button data-tab="assets" class="on">Assets</button><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="art">Art</button>
@@ -224,6 +226,7 @@ async function load() {
   if (data.error) { showStatus(data.error, false, true); return; }
   S = data;
   $('gameName').textContent = S.game;
+  $('version').textContent = S.version ? 'v' + S.version : '';
   document.title = 'gamekit · ' + S.game;
   fillFilters();
   renderAll();
