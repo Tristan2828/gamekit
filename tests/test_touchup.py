@@ -54,26 +54,42 @@ class TouchUpTests(unittest.TestCase):
         back, _ = art.render(art.load_text_sprite(path, self.entries()))
         self.assertEqual(back.tobytes(), image.tobytes())  # round trip, pixel for pixel
 
-    def test_from_pictures_fills_every_frame_and_draws(self) -> None:
-        path, problems = touchup.from_pictures(self.m, self.ghoul, {"ghoul": "ghoul-1.png", "ghoul_walk_2": "ghoul-2.png"})
-        self.assertEqual(path, self.root / "art" / "ghoul.yaml")
-        self.assertEqual(problems, [])  # every frame file was rendered, sizes right, on the palette
-        sprite = art.load_text_sprite(path, self.entries())
-        self.assertEqual({k: len(v) for k, v in sprite.frames.items()}, {"idle": 1, "walk": 2})
-        self.assertEqual(sprite.frames["walk"][0], sprite.frames["idle"][0])  # walk_1 had none: copies idle
-        self.assertNotEqual(sprite.frames["walk"][1], sprite.frames["idle"][0])
-        ghoul = manifest.load(self.root / "assets.yaml").assets[0]
-        self.assertEqual((ghoul.source, ghoul.status), ("claude", "draft"))
-        with self.assertRaisesRegex(touchup.TouchUpError, "REPLACE:art/ghoul.yaml"):
-            touchup.from_pictures(self.m, self.ghoul, {"ghoul": "ghoul-1.png"})
+    def test_drafts_go_to_pictures_not_the_game(self) -> None:
+        before = (self.root / "assets.yaml").read_text(encoding="utf-8")
+        saved = touchup.drafts(self.m, self.ghoul, {"ghoul": "ghoul-1.png", "ghoul_walk_2": "ghoul-2.png"},
+                               every_frame=True)
+        self.assertEqual([p.name for p in saved], ["ghoul-1-touchup-10x10.png", "ghoul-1-touchup-10x10-2.png",
+                                                   "ghoul-2-touchup-10x10.png"])
+        self.assertEqual((self.root / "assets.yaml").read_text(encoding="utf-8"), before)  # the game is untouched
+        self.assertFalse((self.root / "art").exists())
+        frames = [pictures.read_meta(p)["frame"] for p in saved]
+        self.assertEqual(frames, ["ghoul", "ghoul_walk_1", "ghoul_walk_2"])
+        self.assertEqual(pictures.read_meta(saved[1])["copy_of"], "ghoul")  # walk_1 had no picture: copies idle
+        self.assertTrue(all(pictures.read_meta(p)["touchup"] for p in saved))
+        text = saved[0].with_suffix(".yaml")
+        self.assertIn("rows: |", text.read_text(encoding="utf-8"))
+        # Claude edits the rows; render draws the PNG again from them
+        lines = text.read_text(encoding="utf-8").splitlines()
+        row = lines.index("rows: |") + 1
+        lines[row] = "  w" + lines[row][3:]
+        text.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        png, problems = touchup.render(self.m, text.name)
+        self.assertEqual((png, problems), (saved[0], []))
+        with Image.open(png) as image:
+            self.assertEqual(image.convert("RGBA").getpixel((0, 0)), (255, 255, 255, 255))
+        # only frames with pictures, unless every_frame
+        self.assertEqual(len(touchup.drafts(self.m, self.ghoul, {"ghoul_walk_2": "ghoul-2.png"})), 1)
 
-    def test_from_files(self) -> None:
-        with self.assertRaisesRegex(touchup.TouchUpError, "no file yet"):
-            touchup.from_files(self.m, self.coin)
-        pictures.use_as_asset(self.m, self.coin, "ghoul-1.png")
-        path, problems = touchup.from_files(self.m, self.coin)
-        self.assertIn("rows: |", path.read_text(encoding="utf-8"))
-        self.assertEqual(manifest.load(self.root / "assets.yaml").assets[1].source, "claude")
+    def test_draft_of_a_still_and_removing_it(self) -> None:
+        png = touchup.drafts(self.m, self.coin, {"coin": "ghoul-1.png"})[0]
+        self.assertEqual(png.name, "ghoul-1-touchup-8x8.png")
+        with Image.open(png) as image:  # used as it is (already the coin's size)
+            self.assertEqual(pictures.make_sprite(self.m, self.coin, png.name).tobytes(), image.convert("RGBA").tobytes())
+        pictures.remove(self.m, png.name)
+        self.assertFalse(png.with_suffix(".yaml").exists())
+        self.assertTrue((self.root / "pictures" / "_removed" / png.with_suffix(".yaml").name).exists())
+        with self.assertRaisesRegex(touchup.TouchUpError, "no text rows"):
+            touchup.render(self.m, "ghoul-1.png")
 
     def test_sprite_library(self) -> None:
         kept = pictures.save_sprite(self.m, self.ghoul, "ghoul-1.png", frame="ghoul_walk_1")

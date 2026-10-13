@@ -88,11 +88,11 @@ def keep(manifest: Manifest, kind: str, name: str, kept: bool = True) -> None:
 
 
 def remove(manifest: Manifest, kind: str, name: str) -> Path:
-    """Moves a take (and its .json) into <folder>/_removed/."""
+    """Moves a take (and its .json, and a picture's touch-up .yaml) into <folder>/_removed/."""
     path = path_of(manifest, kind, name)
     bin_ = folder(manifest, kind) / "_removed"
     bin_.mkdir(exist_ok=True)
-    for part in (path, path.with_suffix(".json")):
+    for part in (path, path.with_suffix(".json"), path.with_suffix(".yaml")):
         if part.exists():
             target = bin_ / part.name
             if target.exists():

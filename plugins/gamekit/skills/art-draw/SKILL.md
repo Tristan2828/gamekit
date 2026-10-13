@@ -1,6 +1,6 @@
 ---
 name: art-draw
-description: Draw pixel art sprites, icons, tiles and UI images as text rows (one character per pixel) on the game's palette, render them to PNG sprite sheets, and review them visually. Use when the user asks Claude to draw, redraw, animate or touch up a pixel art asset listed in assets.yaml (source claude), including touching up a draft made from AI pictures ("touch up the shambler").
+description: Draw pixel art sprites, icons, tiles and UI images as text rows (one character per pixel) on the game's palette, render them to PNG sprite sheets, and review them visually. Use when the user asks Claude to draw, redraw, animate or touch up a pixel art asset listed in assets.yaml (source claude), and touching up drafts made from AI pictures ("touch up the shambler drafts", kept in pictures/).
 ---
 
 # Draw pixel art as text
@@ -46,12 +46,16 @@ keys:          # optional; char -> palette color name, palette index, or RRGGBB
 
 ## Touching up an AI draft
 
-"Touch up <id>" usually means a draft made from AI pictures: the asset page's **Touch up with Claude** (or
-`gamekit.py touchup <id> [--from <frame>=<picture> ...]`) wrote `art/<id>.yaml` from shrunk pictures, set
-`source: claude` and rendered it. Its first line says which pictures it came from.
+"Touch up the <id> drafts" means drafts made from AI pictures, kept in `pictures/` (not in the game): the
+asset page's **Touch up with Claude** (or `gamekit.py touchup <id> <frame>=<picture> ... [--every-frame]`) saved
+each as `pictures/<name>-touchup-<w>x<h>.png` with its pixels as text rows beside it (same name, `.yaml`) and a
+`.json` (`for`: the asset, `frame`, `sprite_of`: the full-size picture, `copy_of`: the frame it was copied
+from). Find them with Glob `pictures/*-touchup-*.yaml` and their `.json` `for`; take the newest per frame.
+**Don't touch the asset's own files, `art/<id>.yaml` or `assets.yaml`**: the user puts a draft in the game
+with **Use** when they like it.
 
-1. Read the yaml, then look at the rendered frames (Read the PNGs, zoomed with `preview`) and at the full-size
-   pictures named in the first line (`pictures/<name>`): they show what the creature is meant to look like.
+1. Read each yaml, then look at its PNG (zoomed with `preview`) and the full-size picture in `sprite_of`:
+   it shows what the creature is meant to look like.
 2. Fix what shrinking breaks, keeping the draft's colors and overall shape: center the creature and make it
    left-right symmetric if the game wants that; a clean 1 px outline (no gaps, no doubled corners); a readable
    face (eyes as clear 1-2 px marks in their bright color, not touching the outline); remove stray pixels and
@@ -59,7 +63,9 @@ keys:          # optional; char -> palette color name, palette index, or RRGGBB
 3. Animation drafts: frames the pictures didn't cover are copies of the frame before them. Make each one move
    (walk: legs alternate, body bobs 1 px; attack: lean or reach), changing as few pixels as possible and keeping
    the outline and feet steady.
-4. Render with `draw`, look at it again, and say what changed. Keep the first comment line (where it came from).
+4. Edit the yaml in place (keep its first comment line), draw its PNG again with
+   `gamekit.py touchup-render <name>.yaml`, look at it again, and say what changed. The tile on the Pictures tab
+   updates; tell the user to press **Use** on it to put it in the game.
 
 ## Steps
 

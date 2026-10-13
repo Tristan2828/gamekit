@@ -645,22 +645,18 @@ def do_save_sprite(loaded: manifest.Manifest, body: dict) -> dict:
 
 
 def do_touchup(loaded: manifest.Manifest, body: dict) -> dict:
-    """Touch up with Claude: the sprite as Claude's text rows (art/<id>.yaml), from pictures or its own PNGs."""
+    """Touch up with Claude: game-sized drafts kept in pictures/ with their text rows, for Claude to fix.
+    Nothing goes into the game until one is used."""
     a = find(loaded, str(body.get("id", "")))
     try:
-        if body.get("frames"):
-            path, problems = touchup.from_pictures(loaded, a, _chosen_frames(body), bool(body.get("background", True)),
-                                                   bool(body.get("snap", True)), bool(body.get("outline", True)),
-                                                   bool(body.get("force")))
-        else:
-            path, problems = touchup.from_files(loaded, a, bool(body.get("force")))
+        saved = touchup.drafts(loaded, a, _chosen_frames(body), bool(body.get("background", True)),
+                               bool(body.get("snap", True)), bool(body.get("outline", True)), bool(body.get("every_frame")))
     except touchup.TouchUpError as error:
-        if str(error).startswith("REPLACE:"):
-            raise UserError("REPLACE?") from None  # the page asks first: Claude may have drawn it already
         raise UserError(str(error)) from None
-    rel = path.relative_to(loaded.root).as_posix()
-    return {"problems": problems, "path": rel,
-            "message": f"{a.id} is ready for Claude: {rel} (source: claude). Ask Claude to touch up {a.id}."}
+    count = f"{len(saved)} touch-up draft{'s' if len(saved) != 1 else ''}"
+    return {"made": [p.name for p in saved],
+            "message": f'{a.id}: {count} in your pictures. Ask Claude: "touch up the {a.id} drafts". '
+                       "Press Use on one when you like it."}
 
 
 def do_cutout_picture(loaded: manifest.Manifest, body: dict) -> dict:

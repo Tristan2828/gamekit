@@ -353,13 +353,20 @@ def save_sprite(manifest: Manifest, asset: Asset, name: str, background: bool = 
     """Makes a picture's sprite for an asset (as Use would) and keeps it in pictures/ as a new picture,
     <name>-sprite-<w>x<h>.png, to compare with others, use, or touch up later."""
     sprite = make_sprite(manifest, asset, name, background, snap, outline)
+    return keep_sprite(manifest, asset, sprite, name, frame, extra={"outline": outline, "snap": snap})
+
+
+def keep_sprite(manifest: Manifest, asset: Asset, sprite: Image.Image, name: str, frame: str = "",
+                label: str = "sprite", extra: dict | None = None) -> Path:
+    """Saves a sprite made from picture `name` as a new picture, <name>-<label>-<w>x<h>.png."""
     source = path_of(manifest, name)
-    stem = f"{source.stem}-sprite-{sprite.width}x{sprite.height}"
+    stem = f"{source.stem}-{label}-{sprite.width}x{sprite.height}"
     path, n = source.with_name(stem + ".png"), 2
     while path.exists():
         path, n = source.with_name(f"{stem}-{n}.png"), n + 1
     sprite.save(path)
-    keep = {k: v for k, v in read_meta(source).items() if k not in ("made", "kept", "width", "height", "frame")}
+    keep = {k: v for k, v in read_meta(source).items()
+            if k not in ("made", "kept", "width", "height", "frame", "touchup", "copy_of")}
     made.record(path, keep | {"sprite_of": name, "for": asset.id, "frame": frame, "width": sprite.width,
-                              "height": sprite.height, "outline": outline, "snap": snap})
+                              "height": sprite.height} | (extra or {}))
     return path

@@ -772,7 +772,7 @@ async function renderPictures() {
   const targets = imageAssets();
   const assetOptions = targets.map(a => option(a.id, `${a.id} (${a.size.join('×')}, ${a.status})`, false)).join('');
   $('picList').innerHTML = data.pictures.length ? data.pictures.map(p => {
-    const m = p.meta || {}, sprite = !!m.sprite_of;  // a game-sized sprite kept by Make sprite
+    const m = p.meta || {}, sprite = !!m.sprite_of;  // a game-sized sprite kept by Make sprite or Touch up with Claude
     const pictureButtons = sprite ? '' : `
         <button data-again="${esc(p.name)}" title="Same description, new seed">Another take</button>
         <button data-adjust="${esc(p.name)}" title="Put its settings back in the form">Adjust</button>
@@ -780,13 +780,13 @@ async function renderPictures() {
         ${m.cutout_of ? '' : `<button data-cut="${esc(p.name)}" title="${cutReady ? 'A copy with the background made transparent (AI, about 10 s)' : 'Sets up the cut-out engine first (about 300 MB, once)'}">${cutReady ? 'Cut out' : 'Cut out (set up)'}</button>`}`;
     return `<div class="card pic${m.kept ? ' kept' : ''}">
       <img class="shot${m.cutout_of || sprite ? ' cut' : ''}${sprite ? ' sprite' : ''}" src="${p.url}" alt="" loading="lazy"><div class="gameview"></div>
-      <div class="prompt" title="${esc(m.prompt)}">${sprite ? `<b>Sprite for ${esc(m.for)}${m.frame && m.frame !== m.for ? ' (' + esc(m.frame) + ')' : ''}</b> · ` : ''}${esc(m.prompt || p.name)}</div>
-      <div class="meta">${sprite ? `${esc(m.width)}×${esc(m.height)} sprite from ${esc(m.sprite_of)}`
+      <div class="prompt" title="${esc(m.prompt)}">${sprite ? `<b>${m.touchup ? 'Touch-up draft' : 'Sprite'} for ${esc(m.for)}${m.frame && m.frame !== m.for ? ' (' + esc(m.frame) + ')' : ''}</b> · ` : ''}${esc(m.prompt || p.name)}</div>
+      <div class="meta">${sprite ? `${esc(m.width)}×${esc(m.height)} ${m.touchup ? 'draft' : 'sprite'} from ${esc(m.sprite_of)}${m.copy_of ? ' (a copy of ' + esc(m.copy_of) + ')' : ''}`
         : `seed ${esc(m.seed)} · ${esc(m.width)}×${esc(m.height)}${m.tile ? ' · seamless' : ''}${m.refs && m.refs.length ? ' · from ' + m.refs.length + ' picture(s)' : ''}${m.cutout_of ? ' · cut-out' : ''}`} · ${esc(m.made || '')}</div>
       <div class="buttons">
         <button data-pkeep="${esc(p.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
         <button data-game="${esc(p.name)}" title="Switch between the picture and the sprite it would make, as the game shows it">In game</button>${pictureButtons}
-        <button data-useopen="${esc(p.name)}">${sprite ? 'Use / touch up…' : 'Use as asset…'}</button>
+        <button data-useopen="${esc(p.name)}">${m.touchup ? 'Use…' : sprite ? 'Use / touch up…' : 'Use as asset…'}</button>
         ${sprite ? '' : `<button data-animate="${esc(p.name)}" title="Make this picture's creature into an animation: one picture per frame, played back before saving">Animate…</button>`}
         <button data-premove="${esc(p.name)}" title="Moves it to pictures/_removed">Remove</button>
       </div>
@@ -799,9 +799,10 @@ async function renderPictures() {
         <div class="preview"><img alt=""><span class="hint"></span></div>
         <div class="buttons"><button data-use="${esc(p.name)}" title="Saves it as the asset's file (or the chosen frame)">Use</button>
           ${sprite ? '' : `<button data-sprite="${esc(p.name)}" title="Keeps this sprite in your pictures as its own tile, to compare, use or touch up later">Make sprite</button>`}
-          <button data-touch="${esc(p.name)}" title="Turns it into Claude's pixel-by-pixel text format (art/<id>.yaml), so Claude can fix the face, eyes and outline">Touch up with Claude</button></div>
+          ${m.touchup ? '' : `<button data-touch="${esc(p.name)}" title="Adds a draft of this sprite to your pictures, with its pixels as text that Claude can fix (face, eyes, outline). Nothing goes into the game.">Touch up with Claude</button>`}</div>
         <div class="hint">${sprite ? 'Already at the asset\'s size: Use saves it as it is.' : 'Shrinks it to the asset\'s size; the preview is exactly what Use and Make sprite save.'}
-          Small sprites lose detail: <b>Touch up with Claude</b> hands the draft to Claude to fix by hand.</div>
+          ${m.touchup ? `Ask Claude to <b>touch up the ${esc(m.for)} drafts</b>; this picture updates when Claude is done.`
+            : 'Small sprites lose detail: <b>Touch up with Claude</b> adds a draft to your pictures for Claude to fix by hand.'}</div>
       </div>
     </div>`;
   }).join('') : '<div class="empty">No pictures yet. Describe one and press <b>Make it</b>.</div>';
@@ -898,11 +899,9 @@ $('makePictures').onclick = () => {
 async function touchUp(settings) {
   const done = await api('/api/touchup', settings);
   if (!done) return;
-  // the draft is the asset's own file now, not a picture: show it on the Assets tab
-  showStatus(`${done.message} It's the game's ${settings.id} now (shown here on the Assets tab). Next, ask Claude: "touch up the ${settings.id}".`, false);
-  $('fText').value = settings.id;
-  setTab('assets');
-  load();
+  showStatus(done.message, false);  // new picture tiles; nothing goes into the game until one is used
+  renderPictures();
+  $('picList').scrollIntoView({ behavior: 'smooth' });
 }
 
 // ---------- Pictures tab: "In game" view of a picture ----------
@@ -1012,7 +1011,7 @@ function renderAnimation(changed) {
     <div class="buttons">
       <button class="primary" id="animMake" style="width:auto" ${missing.length ? '' : 'disabled'}>Make the missing frames${missing.length ? ` (${missing.length})` : ''}</button>
       <button id="animUse" ${missing.length === a.targets.length ? 'disabled' : ''}>Use all frames</button>
-      <button id="animTouch" ${missing.length === a.targets.length ? 'disabled' : ''} title="All frames in Claude's pixel-by-pixel text format (art/${esc(anim.id)}.yaml), for Claude to fix by hand">Touch up with Claude</button>
+      <button id="animTouch" ${missing.length === a.targets.length ? 'disabled' : ''} title="Adds a draft of every frame to your pictures (frames without a picture start as a copy of the one before), with their pixels as text for Claude to fix. Nothing goes into the game.">Touch up with Claude</button>
     </div>
     <label class="check"><input type="checkbox" class="bg" checked> Remove the background</label>
     <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette</label>
@@ -1037,7 +1036,7 @@ function renderAnimation(changed) {
     a.targets.filter(t => !anim.slots[t]).forEach(t => poses[t] = anim.poses[t] || '');
     startJob('/api/pictures/frames', { id: anim.id, name: anim.slots[a.targets[0]] || anim.base, poses });
   };
-  $('animTouch').onclick = () => touchUp(animSettings());
+  $('animTouch').onclick = () => touchUp({ ...animSettings(), every_frame: true });
   $('animUse').onclick = async () => {
     const done = await api('/api/pictures/animation/use', animSettings());
     if (done) load();

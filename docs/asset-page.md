@@ -268,10 +268,11 @@ pick under **Use as asset…**. Nothing is saved.
 with **In game** too. A sprite tile can be used as the asset as it is, or touched up.
 
 **Touch up with Claude** (under **Use as asset…**, and in the Animate panel for all frames at once) is for small
-sprites, where shrinking loses the face, eyes or outline. It saves the sprite in Claude's pixel-by-pixel text
-format, `art/<id>.yaml`, marks the asset `source: claude`, and saves its files so the game shows the draft
-straight away. Then tell Claude **"touch up the shambler"**: it looks at the draft and the big pictures, and fixes
-the pixels by hand (centering, outline, eyes, silhouette, and the walk frames' movement).
+sprites, where shrinking loses the face, eyes or outline. It adds a **touch-up draft** tile to your pictures
+(one per frame from the Animate panel; frames without a picture start as a copy of the one before), with its
+pixels saved as text beside it. Nothing goes into the game. Then tell Claude **"touch up the shambler drafts"**:
+it looks at the drafts and the big pictures, fixes the pixels by hand (centering, outline, eyes, silhouette, and
+the walk frames' movement), and the tiles update. Press **Use** on a draft when you like it.
 
 **Cut out** makes a copy of a picture with the background made transparent by a second AI model (BiRefNet),
 shown on a checkerboard and marked "cut-out". It keeps soft edges and the gaps between arms and body, which the

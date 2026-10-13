@@ -174,14 +174,17 @@ def main(argv: list[str] | None = None) -> int:
     pic_frames.add_argument("--no-palette", action="store_true", help="don't snap colors to the palette")
     pic_frames.add_argument("--no-outline", action="store_true", help="no outline, even if the manifest's sprites: sets one")
 
-    touch = commands.add_parser("touchup", help="a sprite as Claude's text rows (art/<id>.yaml), to touch up by hand")
+    touch = commands.add_parser("touchup", help="touch-up drafts in pictures/: game-sized sprites plus their text rows")
     touch.add_argument("asset", help="asset id")
-    touch.add_argument("--from", dest="pictures", nargs="+", default=[],
-                       help="<frame>=<picture> (or one picture for a still image); default: the asset's own PNGs")
+    touch.add_argument("pictures", nargs="+", help="<frame>=<picture> (or one picture for a still image)")
+    touch.add_argument("--every-frame", action="store_true",
+                       help="also a draft for each frame without a picture (a copy of the frame before it)")
     touch.add_argument("--keep-background", action="store_true", help="don't remove the background")
     touch.add_argument("--no-palette", action="store_true", help="don't snap colors to the palette")
     touch.add_argument("--no-outline", action="store_true", help="no outline, even if the manifest's sprites: sets one")
-    touch.add_argument("--force", action="store_true", help="replace an existing text sprite")
+
+    touch_render = commands.add_parser("touchup-render", help="draw a touch-up draft's PNG again from its edited .yaml")
+    touch_render.add_argument("picture", help="the draft's name in pictures/ (.png or .yaml)")
 
     snd = commands.add_parser("sound", help="make sound effects from a description (sound engine) into sound-takes/")
     snd.add_argument("prompt", help="e.g. \"a heavy wooden door slams shut in a stone hall\"")
@@ -216,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
                 "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
                 "sfx": _sfx, "music": _music, "ui": _ui, "engines": _engines, "picture": _picture,
                 "picture-cutout": _picture_cutout, "picture-use": _picture_use,
-                "picture-frames": _picture_frames, "touchup": _touchup, "sound": _sound, "voice": _voice,
+                "picture-frames": _picture_frames, "touchup": _touchup, "touchup-render": _touchup_render,"sound": _sound, "voice": _voice,
                 "take-use": _take_use}
     try:
         return handlers[args.command](args)
@@ -801,26 +804,26 @@ def _picture_frames(args: argparse.Namespace) -> int:
 def _touchup(args: argparse.Namespace) -> int:
     loaded = manifest.load(args.manifest)
     asset = _asset(loaded, args.asset)
-    try:
-        if args.pictures:
-            chosen = {}
-            for item in args.pictures:
-                frame, _, name = item.partition("=")
-                chosen[frame if name else asset.id] = name or frame
-            if not loaded.frame_paths(asset):
-                chosen = {asset.id: next(iter(chosen.values()))}
-            path, problems = touchup.from_pictures(loaded, asset, chosen, not args.keep_background,
-                                                   not args.no_palette, not args.no_outline, args.force)
-        else:
-            path, problems = touchup.from_files(loaded, asset, args.force)
-    except touchup.TouchUpError as error:
-        if str(error).startswith("REPLACE:"):
-            raise touchup.TouchUpError(f"{str(error)[8:]} already exists; add --force to replace it") from None
-        raise
-    print(f"{asset.id}: wrote {path.relative_to(loaded.root).as_posix()} (source: claude) and rendered it")
+    chosen = {}
+    for item in args.pictures:
+        frame, _, name = item.partition("=")
+        chosen[frame if name else asset.id] = name or frame
+    if not loaded.frame_paths(asset):
+        chosen = {asset.id: next(iter(chosen.values()))}
+    saved = touchup.drafts(loaded, asset, chosen, not args.keep_background, not args.no_palette,
+                           not args.no_outline, args.every_frame)
+    for path in saved:
+        print(f"{asset.id}: pictures/{path.name} and its text rows pictures/{path.with_suffix('.yaml').name}")
+    return 0
+
+
+def _touchup_render(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    path, problems = touchup.render(loaded, args.picture)
+    print(f"drew pictures/{path.name} from {path.with_suffix('.yaml').name}")
     for problem in problems:
         print(f"  - {problem}")
-    return 0
+    return 1 if problems else 0
 
 
 def _picture_use(args: argparse.Namespace) -> int:
