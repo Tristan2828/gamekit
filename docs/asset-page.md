@@ -242,15 +242,19 @@ Pictures from a description (FLUX.2 klein), on your graphics card.
    **Seed**: leave empty for new versions.
 4. **Make it**. Click any picture to see it full size.
 
-**Each picture tile** shows the asset it's for and the words that matter (**Details** shows the whole description,
-size, seed, date and file name). On the picture: badges (cut-out, sprite, touch-up draft), a **star** for your
-favourites, and a **Picture / In game** switch. Under it, **Use as asset…** and **Animate…**, then small icon
-buttons (hover for their names): cut out (scissors), another take, adjust, work from this, and **remove** (red,
-on the right; it moves the picture to `pictures/_removed`). Above the tiles, **Show** picks All, **★ Starred** or
+**Each picture tile** shows the asset it's for and the words that matter, with tags under them (sprite and its
+size, cut-out, touch-up draft, worked from a picture). **Details** shows the whole description, size, seed, date
+and file name. On the picture: a **star** for your favourites and a **Picture / In game** switch. Under it,
+**Use as asset…**, then small icon buttons (hover for their names): cut out (scissors), another take, adjust,
+work from this, animate (a walking person), and **remove** (red, on the right; it moves the picture to
+`pictures/_removed`). Sprite tiles have **Use in game…** and **Touch up with Claude** instead. Above the tiles, **Show** picks All, **★ Starred** or
 **Sprites** (sprite tiles and touch-up drafts), and **View** shows every tile as a picture or in game.
 
-**Work from this** starts the next pictures from that one: the new picture keeps the creature's look, and the words
-say only what changes (a pose button: **walk 1**, **walk 2**, **attack**, **wings up**...).
+**Work from this** starts the next pictures from that one: the new pictures keep the creature's look, colors and
+size. The tile gets a green frame, the form scrolls into view with the picture under **Working from**, the size and
+asset are set to match, and the description starts with "the same creature, same colors and style, ": add only
+what changes (a pose, a view, something it holds), or press a pose (**walk 1**, **walk 2**, **attack**...). Press
+it again, or × under Working from, to stop.
 
 **Animate…** turns a picture into a whole animation for an animated sprite:
 1. Press **Animate…** under the picture. A panel opens at the top with one box per frame of the asset (e.g.

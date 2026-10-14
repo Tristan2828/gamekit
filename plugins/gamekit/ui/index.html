@@ -12,6 +12,7 @@
     --text: #e6eee9; --dim: #93a39c; --accent: #4fc39a; --accent-dim: #2b7a5e; --good: #8fca6a; --warn: #e0b04f; --bad: #e0705f;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
   header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 18px 24px 6px; }
   h1 { margin: 0; font: 600 26px "Cascadia Mono", Consolas, monospace; color: var(--accent); letter-spacing: .5px; }
@@ -123,9 +124,12 @@
   .pic img.shot.sprite { image-rendering: pixelated; aspect-ratio: 1; object-fit: contain; }
   .pic img.shot.cut { background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 16px 16px; }
   .pic.kept { border-color: var(--accent-dim); }
-  .pic .badges { position: absolute; top: 6px; left: 6px; display: flex; gap: 4px; flex-wrap: wrap; pointer-events: none; }
-  .pic .badge { background: rgba(0,0,0,.65); color: #d8e4de; font-size: 11px; padding: 0 7px; border-radius: 10px; }
-  .pic .badge.draft { color: var(--warn); }
+  .pic .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .pic .tags:empty { display: none; }
+  .pic .tag { border: 1px solid var(--line); color: var(--dim); font-size: 11px; padding: 0 7px; border-radius: 10px; }
+  .pic .tag.draft { border-color: var(--warn); color: var(--warn); }
+  .pic.from { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  button.iconbtn.on { color: var(--accent); border-color: var(--accent); }
   .pic .star { position: absolute; top: 5px; right: 5px; padding: 5px; line-height: 0; border: 0; border-radius: 20px; background: rgba(0,0,0,.6); color: #c9d3cf; }
   .pic .star.on { color: #f2c94c; }
   .pic .viewseg { position: absolute; left: 6px; bottom: 6px; background: rgba(0,0,0,.7); border-color: rgba(255,255,255,.12); }
@@ -140,8 +144,8 @@
   .pic .info dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 0; }
   .pic .info dt { color: var(--dim); }
   .pic .info dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
-  .pic .actions { display: flex; gap: 6px; margin-top: 8px; }
-  .pic .actions button { flex: 1; font-size: 12.5px; padding: 5px 8px; }
+  .pic .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .pic .actions button { flex: 1 1 auto; white-space: nowrap; font-size: 12.5px; padding: 5px 8px; }
   .pic .actions button.on { border-color: var(--accent); background: #1b3329; }
   .pic .tools { display: flex; gap: 4px; margin-top: 6px; align-items: center; }
   .pic .tools .spacer { flex: 1; }
@@ -189,7 +193,10 @@
   #bigPic { display: none; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.85); align-items: center; justify-content: center; cursor: zoom-out; }
   #bigPic img { max-width: 94vw; max-height: 94vh; }
   .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-  .refs span { font-size: 12px; border: 1px solid var(--line); border-radius: 20px; padding: 1px 8px; color: var(--dim); }
+  .refs span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border: 1px solid var(--accent-dim); border-radius: 8px; padding: 3px 4px 3px 3px; color: var(--text); }
+  .refs img { width: 40px; height: 40px; object-fit: contain; border-radius: 4px; background: #0b0e0d; }
+  .refs button { border: 0; background: none; padding: 2px; line-height: 0; color: var(--dim); }
+  #refBox { border: 1px solid var(--accent-dim); border-radius: 8px; padding: 2px 10px 10px; margin-top: 12px; background: #142520; }
   #statusStop { display: none; }
   .soon { color: var(--dim); font-size: 12.5px; }
 </style>
@@ -349,7 +356,8 @@
         <label class="check"><input type="checkbox" id="pTile"> Repeats without a seam (textures)</label>
         <div class="row"><div><label for="pSeed">Seed (optional)</label><input type="number" id="pSeed" placeholder="random"></div><div></div></div>
         <div id="refBox" style="display:none"><label>Working from</label><div class="refs" id="refList"></div>
-          <div class="hint" style="margin-top:6px">For animation frames, describe only the pose: the picture keeps the creature's look.</div>
+          <div class="hint" style="margin-top:6px">The new pictures keep this creature's look, colors and size. In the description, say only
+            what changes (a pose, a view, something it holds), or press a pose:</div>
           <div class="chips" id="poseChips"></div><button id="clearRefs" style="margin-top:6px;font-size:12.5px">Clear</button></div>
         <button class="primary" id="makePictures">Make it</button>
         <div class="hint" id="pictureHint" style="margin-top:10px"></div>
@@ -806,6 +814,7 @@ const ICONS = {
   cut: '<circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.8L20 18"/><path d="M8.5 15.2L20 6"/>',
   trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  walk: '<circle cx="13" cy="4" r="2"/><path d="M12.5 7.5L10.5 13"/><path d="M10.5 13L7.5 20"/><path d="M10.5 13l3 3 .5 4"/><path d="M8 10.5l4-2.5 3 3"/>',
 };
 const icon = (name, fill = false) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="${fill ? 'currentColor' : 'none'}" stroke="currentColor" ` +
   `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -828,7 +837,10 @@ async function renderPictures() {
   const remembered = firstTime && S.assets.find(a => a.id === $('pFor').value);
   if (remembered) setSize(...shapeOf(remembered.size[0], remembered.size[1]), `Same shape as ${remembered.id} (${remembered.size[0]}×${remembered.size[1]})`);
   $('refBox').style.display = refs.length ? 'block' : 'none';
-  $('refList').innerHTML = refs.map(r => `<span>${esc(r)}</span>`).join('');
+  const picUrl = name => ((picCache || []).find(x => x.name === name) || {}).url || '';
+  $('refList').innerHTML = refs.map(r => `<span title="${esc(r)}"><img src="${picUrl(r)}" alt="">${esc(shortPrompt(pictureMeta(r).prompt) || r).slice(0, 40)}` +
+    `<button data-unref="${esc(r)}" title="Stop working from this picture">${icon('close')}</button></span>`).join('');
+  $('refList').querySelectorAll('[data-unref]').forEach(b => b.onclick = () => workFrom(b.dataset.unref));
   const data = await api('/api/pictures', {}, true);
   if (!data) return;
   picCache = data.pictures;
@@ -845,9 +857,10 @@ async function renderPictures() {
   const assetOptions = targets.map(a => option(a.id, `${a.id} (${a.size.join('×')}, ${a.status})`, false)).join('');
   $('picList').innerHTML = shown.length ? shown.map(p => {
     const m = p.meta || {}, n = esc(p.name), sprite = !!m.sprite_of;  // a game-sized sprite kept by Make sprite or Touch up with Claude
-    const badges = [m.touchup ? '<span class="badge draft">touch-up draft</span>' : sprite ? '<span class="badge">sprite</span>' : '',
-      m.cutout_of && !sprite ? '<span class="badge">cut-out</span>' : '', m.tile ? '<span class="badge">seamless</span>' : '',
-      sprite ? `<span class="badge">${esc(m.width)}×${esc(m.height)}</span>` : ''].join('');
+    const tags = [m.touchup ? '<span class="tag draft">touch-up draft</span>' : sprite ? '<span class="tag">sprite</span>' : '',
+      sprite ? `<span class="tag">${esc(m.width)}×${esc(m.height)}</span>` : '',
+      m.cutout_of && !sprite ? '<span class="tag">cut-out</span>' : '', m.tile ? '<span class="tag">seamless</span>' : '',
+      m.refs && m.refs.length && !sprite ? '<span class="tag">worked from a picture</span>' : ''].join('');
     const frame = m.frame && m.frame !== m.for ? ' · ' + esc(m.frame) : '';
     const title = sprite ? `<span class="for">${esc(m.for)}${frame}</span>${m.copy_of ? ' · copied from ' + esc(m.copy_of) : ''}`
       : `${m.for ? `<span class="for">${esc(m.for)}</span> · ` : ''}${esc(shortPrompt(m.prompt) || p.name)}`;
@@ -858,32 +871,34 @@ async function renderPictures() {
       m.cutout_of ? '' : `<button class="iconbtn" data-cut="${n}" title="${cutReady ? 'Cut out: a copy with the background made transparent (AI, about 10 s)' : 'Cut out: sets up the cut-out engine first (about 300 MB, once)'}">${icon('cut')}</button>`,
       `<button class="iconbtn" data-again="${n}" title="Another take: same description, new seed">${icon('again')}</button>`,
       `<button class="iconbtn" data-adjust="${n}" title="Adjust: put its settings back in the form">${icon('adjust')}</button>`,
-      `<button class="iconbtn" data-from="${n}" title="Work from this: make the next pictures from this one (e.g. 'the same character from behind')">${icon('from')}</button>`].join('');
-    return `<div class="card pic${m.kept ? ' kept' : ''}" data-name="${n}">
+      `<button class="iconbtn${refs.includes(p.name) ? ' on' : ''}" data-from="${n}" title="${refs.includes(p.name) ? 'Working from this: the next pictures keep its look (press again to stop)' : 'Work from this: the next pictures keep this creature\'s look; you describe only what changes (a pose, a view)'}">${icon('from')}</button>`,
+      `<button class="iconbtn" data-animate="${n}" title="Animate: make this creature into an animation, one picture per frame, played back before saving">${icon('walk')}</button>`].join('');
+    return `<div class="card pic${m.kept ? ' kept' : ''}${refs.includes(p.name) ? ' from' : ''}" data-name="${n}">
      <div class="side">
       <div class="shotwrap">
         <img class="shot${m.cutout_of || sprite ? ' cut' : ''}${sprite ? ' sprite' : ''}" src="${p.url}" alt="" loading="lazy" width="${+m.width || 1}" height="${+m.height || 1}"><div class="gameview"></div>
-        <div class="badges">${badges}</div>
         <button class="star${m.kept ? ' on' : ''}" data-pkeep="${n}" data-kept="${m.kept ? 1 : 0}" title="${m.kept ? 'Starred: press to unstar' : 'Star it, to find it again with Show: Starred'}">${icon('star', m.kept)}</button>
         <div class="seg pick viewseg"><button data-game="${n}" data-to="0" class="${inGame(p.name) ? '' : 'on'}" title="The picture itself">Picture</button><button data-game="${n}" data-to="1" class="${inGame(p.name) ? 'on' : ''}" title="The sprite it makes, at the game's size and scale on the floor">In game</button></div>
       </div>
       <div class="title" title="${esc(m.prompt || '')}">${title}</div>
+      <div class="tags">${tags}</div>
       <details class="info"><summary>Details</summary><dl>${info}</dl></details>
       <div class="actions">
-        <button data-useopen="${n}" title="Shrink it into one of the game's sprites, keep it as a sprite tile, or hand it to Claude">${m.touchup ? 'Use…' : sprite ? 'Use / touch up…' : 'Use as asset…'}</button>
-        ${sprite ? '' : `<button data-animate="${n}" title="Make this picture's creature into an animation: one picture per frame, played back before saving">Animate…</button>`}
+        <button data-useopen="${n}" title="${sprite ? 'Put this sprite in the game (pick the frame first)' : 'Shrink it into one of the game\'s sprites, keep it as a sprite tile, or hand it to Claude'}">${sprite ? 'Use in game…' : 'Use as asset…'}</button>
+        ${sprite && !m.touchup ? `<button data-touchnow="${n}" title="Adds a draft of this sprite to your pictures, with its pixels as text that Claude can fix (face, eyes, outline). Nothing goes into the game.">Touch up with Claude</button>` : ''}
       </div>
+      ${m.touchup ? `<div class="hint">Ask Claude: <b>touch up the ${esc(m.for)} drafts</b>. This tile updates when Claude is done.</div>` : ''}
       <div class="tools">${tools}<span class="spacer"></span>
         <button class="iconbtn danger" data-premove="${n}" title="Remove (moves it to pictures/_removed)">${icon('trash')}</button></div>
      </div>
      <div class="use" id="use-${n}" data-for="${esc(m.for || '')}">
-      <div class="usehead"><b>Use as an asset</b><button class="iconbtn" data-useclose="${n}" title="Close">${icon('close')}</button></div>
+      <div class="usehead"><b>${sprite ? 'Use in game' : 'Use as an asset'}</b><button class="iconbtn" data-useclose="${n}" title="Close">${icon('close')}</button></div>
       <div class="row">
         <div><label>Which sprite</label><select class="asset">${assetOptions}</select></div>
         <div class="framebox"><label>Which frame</label><select class="frame"></select></div>
       </div>
-      <label>Shrinking</label>
-      <div class="opts">
+      <label${sprite ? ' hidden' : ''}>Shrinking</label>
+      <div class="opts"${sprite ? ' hidden' : ''}>
         <label class="opt" title="${m.cutout_of ? 'Already cut out' : 'Takes the plain background away'}"><input type="checkbox" class="bg" checked> Remove background</label>
         <label class="opt" title="Every pixel becomes one of the game's palette colors${S.sprites && S.sprites.reserved_colors ? ' (not the reserved ones)' : ''}"><input type="checkbox" class="snap" checked> Snap to palette</label>
         ${S.sprites && S.sprites.outline ? `<label class="opt" title="A 1 px outline in ${esc(S.sprites.outline)}, as sprites: in assets.yaml asks"><input type="checkbox" class="outline" checked> Outline</label>` : ''}
@@ -893,9 +908,9 @@ async function renderPictures() {
       <div class="usebuttons">
         <button class="go" data-use="${n}" title="Saves it as the sprite's file (or the chosen frame): the game shows it">Use in game</button>
         ${sprite ? '' : `<button data-sprite="${n}" title="Adds this sprite to your pictures as its own tile, to compare, use or touch up later. Nothing goes into the game.">Keep as a sprite tile</button>`}
-        ${m.touchup ? '' : `<button data-touch="${n}" title="Adds a draft of this sprite to your pictures, with its pixels as text that Claude can fix (face, eyes, outline). Nothing goes into the game.">Touch up with Claude</button>`}
+        ${sprite ? '' : `<button data-touch="${n}" title="Adds a draft of this sprite to your pictures, with its pixels as text that Claude can fix (face, eyes, outline). Nothing goes into the game.">Touch up with Claude</button>`}
       </div>
-      <div class="hint">${m.touchup ? `Ask Claude to <b>touch up the ${esc(m.for)} drafts</b>; this tile updates when Claude is done. <b>Use in game</b> when you like it.`
+      <div class="hint">${sprite ? '<b>Use in game</b> replaces the sprite (or the chosen frame) in your game with this one.'
         : '<b>Use in game</b> replaces the sprite in your game. The other buttons only add a tile here. Small sprites lose detail: <b>Touch up with Claude</b> has Claude fix it by hand.'}</div>
      </div>
     </div>`;
@@ -921,11 +936,7 @@ async function renderPictures() {
     renderPictures();
     $('pPrompt').focus();
   });
-  $('picList').querySelectorAll('[data-from]').forEach(b => b.onclick = () => {
-    if (!refs.includes(b.dataset.from)) refs.push(b.dataset.from);
-    renderPictures();
-    $('pPrompt').focus();
-  });
+  $('picList').querySelectorAll('[data-from]').forEach(b => b.onclick = () => workFrom(b.dataset.from));
   $('picList').querySelectorAll('[data-game]').forEach(b => b.onclick = () => {
     gameView[b.dataset.game] = b.dataset.to === '1';
     showInGame(b.dataset.game);
@@ -976,6 +987,11 @@ async function renderPictures() {
     if (!settings.id) return;
     if (await api('/api/pictures/sprite', settings)) renderPictures();
   });
+  $('picList').querySelectorAll('[data-touchnow]').forEach(b => b.onclick = () => {
+    const name = b.dataset.touchnow, m = byName(name).meta;
+    if (!m.for) { showStatus('Which sprite is it for? Use Use in game… to pick one.', false, true); return; }
+    touchUp({ name, id: m.for, frame: m.frame || '', frames: { [m.frame || m.for]: name } });
+  });
   $('picList').querySelectorAll('[data-touch]').forEach(b => b.onclick = async () => {
     const settings = useSettings(document.getElementById('use-' + b.dataset.touch), b.dataset.touch);
     if (!settings.id) return;
@@ -1005,6 +1021,24 @@ async function touchUp(settings) {
   showStatus(done.message, false);  // new picture tiles; nothing goes into the game until one is used
   renderPictures();
   $('picList').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Work from this: the next pictures are made from this one (FLUX keeps its look), so the words say only what
+// changes. Same size and asset as the picture, so new frames line up with it. Pressed again: stop.
+function workFrom(name) {
+  if (refs.includes(name)) { refs.splice(refs.indexOf(name), 1); renderPictures(); return; }
+  const m = pictureMeta(name);
+  refs.push(name);
+  if (m.width && m.height) setSize(m.width, m.height, "Same");
+  $('pTile').checked = false;
+  $('pSeed').value = '';
+  if (m.for && S.assets.some(a => a.id === m.for)) { store.set('pFor', m.for); $('pFor').value = m.for; }
+  if (refs.length === 1) $('pPrompt').value = 'the same creature, same colors and style, ';
+  renderPictures();
+  $('pictureForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const box = $('pPrompt');
+  box.focus();
+  box.setSelectionRange(box.value.length, box.value.length);
 }
 
 // ---------- Pictures tab: "In game" view of a picture ----------
