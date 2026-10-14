@@ -31,6 +31,33 @@ prefer simple, readable solutions. First user: the Godot game `Tristan2828/GameT
 - Never guess a license. Assets from packs, libraries or commissions need license name + author.
 - Typed Python (annotations on functions), standard library first.
 
+## Pictures pipeline (how the pieces fit)
+User guide: `docs/asset-page.md`. Logic: `pictures.py` (library, shrinking), `touchup.py` (drafts), `ui.py` routes.
+- `pictures/` in the game holds every AI picture: `<name>.png` + `<name>.json` meta. Meta keys: `prompt`, `seed`,
+  `width`/`height`, `for` (asset id), `frame`, `refs` (worked from), `kept` (starred), `tile`, `cutout_of`,
+  `sprite_of` (a game-sized **sprite tile**), `touchup` (a **touch-up draft**), `copy_of`. Remove moves files
+  (incl. a draft's `.yaml`) to `pictures/_removed`; nothing is deleted.
+- Only an explicit **Use** writes into the game (`picture-use`, `picture-frames`, the page's Use buttons). Touch-up
+  never does: `touchup` makes `pictures/<stem>-touchup-<w>x<h>.png` + `.yaml` text rows; Claude edits the yaml and
+  runs `touchup-render`; the user presses Use. (The owner explicitly asked for this; don't make tools write the game.)
+- Sprite tiles are already game-sized: `make_sprite`/`make_frames` pass them through unchanged. `make_frames` uses
+  one shared crop for all frames (no jitter) and refuses mixed sizes, so picture animations exclude sprite tiles.
+- Animate panel: from a picture, empty frames are made by FLUX from it (`refs`); from a sprite tile (`anim.sprite`)
+  the frames are too small for AI, so "Animate with Claude" makes drafts for every frame (`--every-frame`) and the
+  user asks Claude to "animate the <id> drafts" (see the art-draw skill).
+- "Work from this" = FLUX reference images: the new picture keeps the creature's look; the words say only what changes.
+
+## Working with the owner
+- They test on the page and give UI feedback in batches; explain choices briefly (e.g. why two similar buttons exist).
+- Release flow when they say so: run tests, bump `plugin.json` version, commit, **ask before `git push`**, then
+  `claude plugin marketplace update gamekit` + `claude plugin update gamekit@gamekit`, and restart the page from
+  `C:\Repos\GameTest` (`python C:\Repos\gamekit\plugins\gamekit\scripts\gamekit.py -m assets.yaml ui`, port 7862).
+  Claude Code itself must be restarted to load new skills.
+- Visual checks of the page: Playwright MCP works (Chrome MCP screenshots time out on a throttled window). Delete the
+  `.playwright-mcp/` folder it leaves in the repo before committing. Try destructive CLI commands on a scratch copy
+  of GameTest, not the real game.
+- On Windows, write multi-line edit scripts to a scratch `.py` file rather than a shell heredoc with backslashes.
+
 ## Verify
 - `python -m unittest discover -s tests` (use `python3` on Linux).
 - `claude plugin validate .` when the CLI is available.

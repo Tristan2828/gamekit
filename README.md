@@ -91,6 +91,12 @@ python <gamekit>/plugins/gamekit/scripts/gamekit.py sfx info <asset-or-file>
 python <gamekit>/plugins/gamekit/scripts/gamekit.py music render [assets]                       # game's Godot script -> OGG
 python <gamekit>/plugins/gamekit/scripts/gamekit.py music clean <file> <asset> --end 64.0        # any music -> OGG, -16 LUFS
 python <gamekit>/plugins/gamekit/scripts/gamekit.py music info <asset-or-file>
+python <gamekit>/plugins/gamekit/scripts/gamekit.py picture "<words>" --for ghoul [--from ghoul-5.png] [--size 1024x1024] [--takes 3]
+python <gamekit>/plugins/gamekit/scripts/gamekit.py picture-cutout ghoul-5.png                    # transparent background copy
+python <gamekit>/plugins/gamekit/scripts/gamekit.py picture-use ghoul-5-cutout.png ghoul [--frame ghoul_walk_1]
+python <gamekit>/plugins/gamekit/scripts/gamekit.py picture-frames ghoul ghoul=a.png ghoul_walk_1=b.png  # one shared crop
+python <gamekit>/plugins/gamekit/scripts/gamekit.py touchup ghoul ghoul=a.png [--every-frame]      # drafts in pictures/, not the game
+python <gamekit>/plugins/gamekit/scripts/gamekit.py touchup-render ghoul-touchup-18x18.yaml        # after editing a draft's text rows
 ```
 
 Sound effects come out as mono 16-bit 44100 Hz WAV, trimmed and normalized to -1 dBFS.
@@ -122,7 +128,10 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 9 | **Music** engine: ACE-Step 1.5 on AMD (~1.5 s per second of music), AI takes on the Music tab, "use for a track" with loop cut | ✅ done |
 | 10 | **Voices** tab (Qwen3-TTS, ~2x real time) and AI **sound effects** (Stable Audio 3, ~0.3 s a sound; gated license, accepted once per person) | ✅ done |
 | 11 | **Cut out** on the Pictures tab: transparent backgrounds with BiRefNet (~8 s, on the processor, beside the picture model) | ✅ done |
-| 12 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
+| 12 | **Animate** on the Pictures tab: one picture per frame from a base picture, played zoomed and in game, saved with one shared crop | ✅ done |
+| 13 | **Sprite tiles** and **touch-up drafts**: game-sized sprites kept in `pictures/`; Claude fixes their pixels as text, the user presses Use | ✅ done |
+| 14 | Pictures tab tiles reworked (0.18 / 0.19): star, Show/View filters, icon tools, Use panel, Work from this, animating sprites with Claude | ✅ done |
+| 15 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
 
 ## Develop
 

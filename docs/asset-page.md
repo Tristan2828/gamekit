@@ -87,11 +87,13 @@ the processor, so it doesn't unload the picture model.
 
 | Button | Does |
 |---|---|
-| **Keep** | Stars it, so you can find your favourites |
-| **Another take** | Same settings, new seed: a new version |
-| **Adjust** | Puts its settings back in the form, to change something and make it again |
+| **Keep** (a star on pictures) | Stars it, so you can find your favourites (Pictures: **Show: ★ Starred**) |
+| **Another take** | Same settings, new seed: one more version, right away |
+| **Adjust** (pictures: **edit and make again**, a pencil) | Puts its settings, seed included, back in the form, to change something first and make it again |
 | **Use as asset… / Use for a track…** | Makes it the game's file for an asset you pick, and marks that asset `source: ai` and draft |
-| **Remove** | Moves it to the `_removed` folder next to it (not deleted) |
+| **Remove** (red) | Moves it to the `_removed` folder next to it (not deleted) |
+
+On the Pictures tab most of these are small icon buttons: hover over one to see its name.
 
 **Where things go:** takes are saved in the game folder, each with a `.json` beside it holding the settings
 that made it: `pictures/`, `music-takes/`, `sound-takes/`, `voice-takes/`. GameTest's `.gitignore` keeps them out
