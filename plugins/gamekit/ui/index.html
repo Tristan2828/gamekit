@@ -76,7 +76,7 @@
   .card .notes { color: var(--dim); font-size: 13px; margin: 6px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
   .card .notes.open { display: block; }
   .card audio { width: 100%; height: 34px; margin-top: 4px; }
-  .assetRow { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: start; }
+  .assetRow { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: start; grid-auto-flow: dense; }
   .thumb { width: 72px; height: 72px; border-radius: 6px; background: #3a4541; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .thumb img { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; }
   .thumb.none { border: 2px dashed var(--line); background: none; color: var(--dim); font-size: 11px; text-align: center; }
@@ -107,22 +107,65 @@
   .tab { display: none; }
   body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures, body[data-tab=voices] .tab.voices, body[data-tab=models] .tab.models { display: block; }
   textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
-  .pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
-  .pic img.shot { width: 100%; border-radius: 6px; display: block; background: #0b0e0d; cursor: zoom-in; }
+  /* Pictures tab: a toolbar (filter, view), then a grid of tiles. A tile whose "Use as asset" is open spans the row. */
+  .picbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: -4px 0 12px; font-size: 12.5px; color: var(--dim); }
+  .seg.pick { margin: 0; }
+  .seg.pick button.on { background: #1b3329; color: var(--text); }
+  .pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; align-items: start; grid-auto-flow: dense; }
+  .card.pic { margin: 0; padding: 10px; }
+  .pic .shotwrap { position: relative; }
+  .pic img.shot { width: 100%; height: auto; border-radius: 6px; display: block; background: #0b0e0d; cursor: zoom-in; }
   .pic .gameview { display: none; width: 100%; aspect-ratio: 1; border-radius: 6px; align-items: center; justify-content: center;
-    flex-direction: column; gap: 8px; color: var(--dim); font-size: 11.5px; text-align: center; }
+    flex-direction: column; gap: 8px; color: var(--dim); font-size: 11.5px; text-align: center; padding: 0 14px; }
   .pic .gameview img { image-rendering: pixelated; }
   .pic.ingame img.shot { display: none; }
   .pic.ingame .gameview { display: flex; }
   .pic img.shot.sprite { image-rendering: pixelated; aspect-ratio: 1; object-fit: contain; }
   .pic img.shot.cut { background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 16px 16px; }
-  .pic.kept { border-color: var(--accent); }
-  .pic .prompt { color: var(--dim); font-size: 12.5px; margin: 6px 0 2px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .pic .buttons button { font-size: 12.5px; padding: 3px 9px; }
-  .use { margin-top: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; display: none; }
-  .use.open { display: block; }
-  .use select { padding: 5px 8px; font-size: 13px; }
-  .use .check { font-size: 13px; margin-top: 6px; }
+  .pic.kept { border-color: var(--accent-dim); }
+  .pic .badges { position: absolute; top: 6px; left: 6px; display: flex; gap: 4px; flex-wrap: wrap; pointer-events: none; }
+  .pic .badge { background: rgba(0,0,0,.65); color: #d8e4de; font-size: 11px; padding: 0 7px; border-radius: 10px; }
+  .pic .badge.draft { color: var(--warn); }
+  .pic .star { position: absolute; top: 5px; right: 5px; padding: 5px; line-height: 0; border: 0; border-radius: 20px; background: rgba(0,0,0,.6); color: #c9d3cf; }
+  .pic .star.on { color: #f2c94c; }
+  .pic .viewseg { position: absolute; left: 6px; bottom: 6px; background: rgba(0,0,0,.7); border-color: rgba(255,255,255,.12); }
+  .pic .viewseg button { padding: 1px 9px; font-size: 11.5px; }
+  .pic .title { font-size: 13px; margin: 8px 0 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .pic .title .for { color: var(--accent); font-weight: 600; }
+  .pic details.info { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .pic details.info summary { cursor: pointer; list-style: none; }
+  .pic details.info summary::-webkit-details-marker { display: none; }
+  .pic details.info summary::after { content: " ▸"; }
+  .pic details.info[open] summary::after { content: " ▾"; }
+  .pic .info dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 0; }
+  .pic .info dt { color: var(--dim); }
+  .pic .info dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+  .pic .actions { display: flex; gap: 6px; margin-top: 8px; }
+  .pic .actions button { flex: 1; font-size: 12.5px; padding: 5px 8px; }
+  .pic .actions button.on { border-color: var(--accent); background: #1b3329; }
+  .pic .tools { display: flex; gap: 4px; margin-top: 6px; align-items: center; }
+  .pic .tools .spacer { flex: 1; }
+  button.iconbtn { padding: 5px 7px; line-height: 0; color: var(--dim); }
+  button.iconbtn:hover { color: var(--text); }
+  button.iconbtn.danger { color: var(--bad); }
+  button.iconbtn.danger:hover { border-color: var(--bad); background: #3a1f1b; }
+  .pic .use { display: none; }
+  .pic.using { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 18px; border-color: var(--accent-dim); }
+  .pic.using .use { display: block; }
+  @media (max-width: 760px) { .pic.using { grid-template-columns: 1fr; } }
+  .use .usehead { display: flex; justify-content: space-between; align-items: center; }
+  .use .usehead b { font-size: 15px; }
+  .use label { margin: 10px 0 4px; }
+  .use select { padding: 6px 8px; font-size: 13.5px; }
+  .use .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .use .opt { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 3px 11px; border: 1px solid var(--line); border-radius: 20px;
+    font-size: 12.5px; color: var(--dim); cursor: pointer; }
+  .use .opt input { accent-color: var(--accent); margin: 0; }
+  .use .opt:has(input:checked) { border-color: var(--accent-dim); background: #1b3329; color: var(--text); }
+  .use .usebuttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .use .usebuttons button { font-size: 13.5px; }
+  button.go { background: var(--accent); border-color: var(--accent); color: #07140f; font-weight: 600; }
+  button.go:hover { filter: brightness(1.08); }
   #animPanel { display: none; margin-bottom: 18px; padding: 14px; border: 1px solid var(--accent); border-radius: 10px; }
   #animPanel.open { display: block; }
   #animPanel .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 10px 0; }
@@ -138,8 +181,11 @@
     background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
   #animPanel .player .game { padding: 18px 24px; border-radius: 6px; margin-bottom: 4px; }
   #animPanel .player .game img { background: none; margin: 0 auto; }
-  .use .preview { display: flex; gap: 10px; align-items: flex-end; margin-top: 8px; min-height: 40px; }
-  .use .preview img { image-rendering: pixelated; background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
+  .use .preview { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-top: 4px; min-height: 60px; }
+  .use .preview figure { margin: 0; text-align: center; font-size: 12px; color: var(--dim); }
+  .use .preview img { image-rendering: pixelated; display: block; margin: 0 auto 4px; }
+  .use .preview .zoomed img { background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
+  .use .preview .floor { padding: 16px 22px; border-radius: 6px; margin-bottom: 4px; }
   #bigPic { display: none; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.85); align-items: center; justify-content: center; cursor: zoom-out; }
   #bigPic img { max-width: 94vw; max-height: 94vh; }
   .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
@@ -354,7 +400,10 @@
     <div class="tab music"><h2 id="takeTitle">AI takes</h2><div id="musicTakes"></div><h2 class="gap">Every track</h2><div id="musicList"></div></div>
     <div class="tab art"><h2 id="artTitle">Images</h2><div class="gallery" id="gallery"></div></div>
     <div class="tab pictures"><div id="animPanel"></div><h2 id="picTitle">Pictures</h2>
-      <label class="check" style="margin:-4px 0 10px"><input type="checkbox" id="gameAll"> Show every picture as it looks in game</label>
+      <div class="picbar">
+        <span>Show</span><div class="seg pick" id="picShow"><button data-show="all">All</button><button data-show="starred" title="Pictures you starred">★ Starred</button><button data-show="sprites" title="Game-sized sprites and touch-up drafts">Sprites</button></div>
+        <span>View</span><div class="seg pick" id="picView" title="How every tile shows its picture; each tile can switch on its own too"><button data-all="0">Pictures</button><button data-all="1">In game</button></div>
+      </div>
       <div class="pics" id="picList"></div></div>
     <div class="tab models wip-panel"><h2>Models</h2><div class="ghost"><div class="empty">Your 3D models will show here, each with the pictures it was made from.</div></div></div>
     <div class="tab voices"><h2 id="voiceTitle">Readings</h2><div id="voiceList"></div></div>
@@ -748,6 +797,22 @@ $('pFor').onchange = () => {
   $('pTile').checked = a.kind === 'tileset';
 };
 
+// small line icons (24x24, drawn with the text color)
+const ICONS = {
+  star: '<path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1.1 6.2L12 17.4l-5.6 2.9 1.1-6.2L3 9.7l6.2-.9z"/>',
+  again: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>',
+  adjust: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+  from: '<circle cx="6" cy="18" r="2.5"/><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7"/><path d="M18 10.5c0 4-4 5-9.5 6"/>',
+  cut: '<circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.8L20 18"/><path d="M8.5 15.2L20 6"/>',
+  trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+};
+const icon = (name, fill = false) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="${fill ? 'currentColor' : 'none'}" stroke="currentColor" ` +
+  `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+// the words that matter in a description made by "For asset" or a pose (the part after the rules), else all of it
+const shortPrompt = text => { const words = String(text || ''); const i = words.lastIndexOf(': '); return i >= 0 ? words.slice(i + 2) : words; };
+let picShow = store.get('picShow', 'all');
+
 async function renderPictures() {
   const engine = S.engines && S.engines.picture;
   const ready = engine && engine.installed;
@@ -767,45 +832,74 @@ async function renderPictures() {
   const data = await api('/api/pictures', {}, true);
   if (!data) return;
   picCache = data.pictures;
-  $('picTitle').textContent = `Pictures (${data.pictures.length})`;
+  const shown = data.pictures.filter(p => {
+    const m = p.meta || {};
+    return picShow === 'starred' ? m.kept : picShow === 'sprites' ? !!m.sprite_of : true;
+  });
+  $('picTitle').textContent = `Pictures (${shown.length === data.pictures.length ? shown.length : shown.length + ' of ' + data.pictures.length})`;
+  document.querySelectorAll('#picShow button').forEach(b => b.classList.toggle('on', b.dataset.show === picShow));
+  document.querySelectorAll('#picView button').forEach(b => b.classList.toggle('on', (b.dataset.all === '1') === allInGame));
   const cut = S.engines && S.engines.cutout, cutReady = !!(cut && cut.installed);
+  const wasUsing = [...document.querySelectorAll('.pic.using')].map(c => c.dataset.name);  // opened again below
   const targets = imageAssets();
   const assetOptions = targets.map(a => option(a.id, `${a.id} (${a.size.join('×')}, ${a.status})`, false)).join('');
-  $('picList').innerHTML = data.pictures.length ? data.pictures.map(p => {
-    const m = p.meta || {}, sprite = !!m.sprite_of;  // a game-sized sprite kept by Make sprite or Touch up with Claude
-    const pictureButtons = sprite ? '' : `
-        <button data-again="${esc(p.name)}" title="Same description, new seed">Another take</button>
-        <button data-adjust="${esc(p.name)}" title="Put its settings back in the form">Adjust</button>
-        <button data-from="${esc(p.name)}" title="Make the next pictures from this one (e.g. 'the same character from behind')">Work from this</button>
-        ${m.cutout_of ? '' : `<button data-cut="${esc(p.name)}" title="${cutReady ? 'A copy with the background made transparent (AI, about 10 s)' : 'Sets up the cut-out engine first (about 300 MB, once)'}">${cutReady ? 'Cut out' : 'Cut out (set up)'}</button>`}`;
-    return `<div class="card pic${m.kept ? ' kept' : ''}">
-      <img class="shot${m.cutout_of || sprite ? ' cut' : ''}${sprite ? ' sprite' : ''}" src="${p.url}" alt="" loading="lazy"><div class="gameview"></div>
-      <div class="prompt" title="${esc(m.prompt)}">${sprite ? `<b>${m.touchup ? 'Touch-up draft' : 'Sprite'} for ${esc(m.for)}${m.frame && m.frame !== m.for ? ' (' + esc(m.frame) + ')' : ''}</b> · ` : ''}${esc(m.prompt || p.name)}</div>
-      <div class="meta">${sprite ? `${esc(m.width)}×${esc(m.height)} ${m.touchup ? 'draft' : 'sprite'} from ${esc(m.sprite_of)}${m.copy_of ? ' (a copy of ' + esc(m.copy_of) + ')' : ''}`
-        : `seed ${esc(m.seed)} · ${esc(m.width)}×${esc(m.height)}${m.tile ? ' · seamless' : ''}${m.refs && m.refs.length ? ' · from ' + m.refs.length + ' picture(s)' : ''}${m.cutout_of ? ' · cut-out' : ''}`} · ${esc(m.made || '')}</div>
-      <div class="buttons">
-        <button data-pkeep="${esc(p.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
-        <button data-game="${esc(p.name)}" title="Switch between the picture and the sprite it would make, as the game shows it">In game</button>${pictureButtons}
-        <button data-useopen="${esc(p.name)}">${m.touchup ? 'Use…' : sprite ? 'Use / touch up…' : 'Use as asset…'}</button>
-        ${sprite ? '' : `<button data-animate="${esc(p.name)}" title="Make this picture's creature into an animation: one picture per frame, played back before saving">Animate…</button>`}
-        <button data-premove="${esc(p.name)}" title="Moves it to pictures/_removed">Remove</button>
+  $('picList').innerHTML = shown.length ? shown.map(p => {
+    const m = p.meta || {}, n = esc(p.name), sprite = !!m.sprite_of;  // a game-sized sprite kept by Make sprite or Touch up with Claude
+    const badges = [m.touchup ? '<span class="badge draft">touch-up draft</span>' : sprite ? '<span class="badge">sprite</span>' : '',
+      m.cutout_of && !sprite ? '<span class="badge">cut-out</span>' : '', m.tile ? '<span class="badge">seamless</span>' : '',
+      sprite ? `<span class="badge">${esc(m.width)}×${esc(m.height)}</span>` : ''].join('');
+    const frame = m.frame && m.frame !== m.for ? ' · ' + esc(m.frame) : '';
+    const title = sprite ? `<span class="for">${esc(m.for)}${frame}</span>${m.copy_of ? ' · copied from ' + esc(m.copy_of) : ''}`
+      : `${m.for ? `<span class="for">${esc(m.for)}</span> · ` : ''}${esc(shortPrompt(m.prompt) || p.name)}`;
+    const info = [['Description', m.prompt], ['Size', m.width && `${m.width}×${m.height}`], ['Seed', m.seed],
+      ['Made from', sprite ? m.sprite_of : m.refs && m.refs.length ? m.refs.join(', ') : ''], ['Made', m.made], ['File', p.name]]
+      .filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
+    const tools = sprite ? '' : [
+      m.cutout_of ? '' : `<button class="iconbtn" data-cut="${n}" title="${cutReady ? 'Cut out: a copy with the background made transparent (AI, about 10 s)' : 'Cut out: sets up the cut-out engine first (about 300 MB, once)'}">${icon('cut')}</button>`,
+      `<button class="iconbtn" data-again="${n}" title="Another take: same description, new seed">${icon('again')}</button>`,
+      `<button class="iconbtn" data-adjust="${n}" title="Adjust: put its settings back in the form">${icon('adjust')}</button>`,
+      `<button class="iconbtn" data-from="${n}" title="Work from this: make the next pictures from this one (e.g. 'the same character from behind')">${icon('from')}</button>`].join('');
+    return `<div class="card pic${m.kept ? ' kept' : ''}" data-name="${n}">
+     <div class="side">
+      <div class="shotwrap">
+        <img class="shot${m.cutout_of || sprite ? ' cut' : ''}${sprite ? ' sprite' : ''}" src="${p.url}" alt="" loading="lazy" width="${+m.width || 1}" height="${+m.height || 1}"><div class="gameview"></div>
+        <div class="badges">${badges}</div>
+        <button class="star${m.kept ? ' on' : ''}" data-pkeep="${n}" data-kept="${m.kept ? 1 : 0}" title="${m.kept ? 'Starred: press to unstar' : 'Star it, to find it again with Show: Starred'}">${icon('star', m.kept)}</button>
+        <div class="seg pick viewseg"><button data-game="${n}" data-to="0" class="${inGame(p.name) ? '' : 'on'}" title="The picture itself">Picture</button><button data-game="${n}" data-to="1" class="${inGame(p.name) ? 'on' : ''}" title="The sprite it makes, at the game's size and scale on the floor">In game</button></div>
       </div>
-      <div class="use" id="use-${esc(p.name)}" data-for="${esc(m.for || '')}">
-        <select class="asset">${assetOptions}</select>
-        <select class="frame" style="margin-top:6px"></select>
-        <label class="check"><input type="checkbox" class="bg" checked> Remove the background${m.cutout_of ? ' (already cut out)' : ''}</label>
-        <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette${S.sprites && S.sprites.reserved_colors ? ' (not the reserved colors)' : ''}</label>
-        ${S.sprites && S.sprites.outline ? `<label class="check"><input type="checkbox" class="outline" checked> 1 px outline ${esc(S.sprites.outline)}</label>` : ''}
-        <div class="preview"><img alt=""><span class="hint"></span></div>
-        <div class="buttons"><button data-use="${esc(p.name)}" title="Saves it as the asset's file (or the chosen frame)">Use</button>
-          ${sprite ? '' : `<button data-sprite="${esc(p.name)}" title="Keeps this sprite in your pictures as its own tile, to compare, use or touch up later">Make sprite</button>`}
-          ${m.touchup ? '' : `<button data-touch="${esc(p.name)}" title="Adds a draft of this sprite to your pictures, with its pixels as text that Claude can fix (face, eyes, outline). Nothing goes into the game.">Touch up with Claude</button>`}</div>
-        <div class="hint">${sprite ? 'Already at the asset\'s size: Use saves it as it is.' : 'Shrinks it to the asset\'s size; the preview is exactly what Use and Make sprite save.'}
-          ${m.touchup ? `Ask Claude to <b>touch up the ${esc(m.for)} drafts</b>; this picture updates when Claude is done.`
-            : 'Small sprites lose detail: <b>Touch up with Claude</b> adds a draft to your pictures for Claude to fix by hand.'}</div>
+      <div class="title" title="${esc(m.prompt || '')}">${title}</div>
+      <details class="info"><summary>Details</summary><dl>${info}</dl></details>
+      <div class="actions">
+        <button data-useopen="${n}" title="Shrink it into one of the game's sprites, keep it as a sprite tile, or hand it to Claude">${m.touchup ? 'Use…' : sprite ? 'Use / touch up…' : 'Use as asset…'}</button>
+        ${sprite ? '' : `<button data-animate="${n}" title="Make this picture's creature into an animation: one picture per frame, played back before saving">Animate…</button>`}
       </div>
+      <div class="tools">${tools}<span class="spacer"></span>
+        <button class="iconbtn danger" data-premove="${n}" title="Remove (moves it to pictures/_removed)">${icon('trash')}</button></div>
+     </div>
+     <div class="use" id="use-${n}" data-for="${esc(m.for || '')}">
+      <div class="usehead"><b>Use as an asset</b><button class="iconbtn" data-useclose="${n}" title="Close">${icon('close')}</button></div>
+      <div class="row">
+        <div><label>Which sprite</label><select class="asset">${assetOptions}</select></div>
+        <div class="framebox"><label>Which frame</label><select class="frame"></select></div>
+      </div>
+      <label>Shrinking</label>
+      <div class="opts">
+        <label class="opt" title="${m.cutout_of ? 'Already cut out' : 'Takes the plain background away'}"><input type="checkbox" class="bg" checked> Remove background</label>
+        <label class="opt" title="Every pixel becomes one of the game's palette colors${S.sprites && S.sprites.reserved_colors ? ' (not the reserved ones)' : ''}"><input type="checkbox" class="snap" checked> Snap to palette</label>
+        ${S.sprites && S.sprites.outline ? `<label class="opt" title="A 1 px outline in ${esc(S.sprites.outline)}, as sprites: in assets.yaml asks"><input type="checkbox" class="outline" checked> Outline</label>` : ''}
+      </div>
+      <label>${sprite ? 'The sprite (already the right size, used as it is)' : 'What it makes'}</label>
+      <div class="preview"><figure class="zoomed"><img alt=""><figcaption></figcaption></figure><figure class="ingame"><div class="floor"><img alt=""></div><figcaption></figcaption></figure></div>
+      <div class="usebuttons">
+        <button class="go" data-use="${n}" title="Saves it as the sprite's file (or the chosen frame): the game shows it">Use in game</button>
+        ${sprite ? '' : `<button data-sprite="${n}" title="Adds this sprite to your pictures as its own tile, to compare, use or touch up later. Nothing goes into the game.">Keep as a sprite tile</button>`}
+        ${m.touchup ? '' : `<button data-touch="${n}" title="Adds a draft of this sprite to your pictures, with its pixels as text that Claude can fix (face, eyes, outline). Nothing goes into the game.">Touch up with Claude</button>`}
+      </div>
+      <div class="hint">${m.touchup ? `Ask Claude to <b>touch up the ${esc(m.for)} drafts</b>; this tile updates when Claude is done. <b>Use in game</b> when you like it.`
+        : '<b>Use in game</b> replaces the sprite in your game. The other buttons only add a tile here. Small sprites lose detail: <b>Touch up with Claude</b> has Claude fix it by hand.'}</div>
+     </div>
     </div>`;
-  }).join('') : '<div class="empty">No pictures yet. Describe one and press <b>Make it</b>.</div>';
+  }).join('') : `<div class="empty">${data.pictures.length ? 'Nothing to show here: try Show: All.' : 'No pictures yet. Describe one and press <b>Make it</b>.'}</div>`;
   const byName = n => data.pictures.find(p => p.name === n);
   $('picList').querySelectorAll('img.shot').forEach(img => img.onclick = () => { $('bigPic').querySelector('img').src = img.src; $('bigPic').style.display = 'flex'; });
   $('picList').querySelectorAll('[data-pkeep]').forEach(b => b.onclick = async () => {
@@ -833,7 +927,7 @@ async function renderPictures() {
     $('pPrompt').focus();
   });
   $('picList').querySelectorAll('[data-game]').forEach(b => b.onclick = () => {
-    gameView[b.dataset.game] = !inGame(b.dataset.game);
+    gameView[b.dataset.game] = b.dataset.to === '1';
     showInGame(b.dataset.game);
   });
   data.pictures.forEach(p => { if (inGame(p.name)) showInGame(p.name); });
@@ -844,25 +938,33 @@ async function renderPictures() {
   const useSettings = (box, name) => ({ name, id: box.querySelector('.asset').value, frame: box.querySelector('.frame').value,
     background: box.querySelector('.bg').checked, snap: box.querySelector('.snap').checked,
     outline: box.querySelector('.outline') ? box.querySelector('.outline').checked : false });
+  // the preview: zoomed on a checkerboard, and in game (the game's scale, on its floor)
   async function previewUse(box, name) {
-    const settings = useSettings(box, name), img = box.querySelector('.preview img'), note = box.querySelector('.preview .hint');
+    const settings = useSettings(box, name), [zoomed, game] = box.querySelectorAll('.preview figure');
     if (!settings.id) return;
     const data = await api('/api/pictures/preview', settings, true);
-    if (!data) { img.removeAttribute('src'); note.textContent = ''; return; }
-    const zoom = Math.max(2, Math.floor(96 / Math.max(data.width, data.height)));
-    img.src = data.image; img.width = data.width * zoom; img.height = data.height * zoom;
-    note.textContent = `${data.width}×${data.height}, shown ×${zoom}`;
+    if (!data) { box.querySelectorAll('.preview img').forEach(i => i.removeAttribute('src')); return; }
+    const zoom = Math.max(2, Math.floor(128 / Math.max(data.width, data.height))), scale = gameScale();
+    Object.assign(zoomed.querySelector('img'), { src: data.image, width: data.width * zoom, height: data.height * zoom });
+    zoomed.querySelector('figcaption').textContent = `${data.width}×${data.height}, zoomed ×${zoom}`;
+    Object.assign(game.querySelector('img'), { src: data.image, width: data.width * scale, height: data.height * scale });
+    game.querySelector('.floor').style.background = floorColor();
+    game.querySelector('figcaption').textContent = `in game (×${scale})`;
   }
   function fillFrames(box) {
     const a = S.assets.find(x => x.id === box.querySelector('.asset').value), frames = box.querySelector('.frame');
     const targets = (a && a.targets) || [];
     frames.innerHTML = targets.map(t => option(t, t === targets[0] && targets.length > 1 ? `${t} (first frame)` : t, false)).join('');
-    frames.style.display = targets.length > 1 ? 'block' : 'none';
+    box.querySelector('.framebox').style.visibility = targets.length > 1 ? 'visible' : 'hidden';
   }
+  $('picList').querySelectorAll('[data-useclose]').forEach(b => b.onclick = () =>
+    $('picList').querySelector(`[data-useopen="${CSS.escape(b.dataset.useclose)}"]`).click());
   $('picList').querySelectorAll('[data-useopen]').forEach(b => b.onclick = () => {
-    const box = document.getElementById('use-' + b.dataset.useopen);
-    box.classList.toggle('open');
-    if (!box.classList.contains('open')) return;
+    const box = document.getElementById('use-' + b.dataset.useopen), card = box.closest('.pic');
+    card.classList.toggle('using');
+    b.classList.toggle('on', card.classList.contains('using'));
+    if (!card.classList.contains('using')) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     if (box.dataset.for && [...box.querySelector('.asset').options].some(o => o.value === box.dataset.for)) box.querySelector('.asset').value = box.dataset.for;
     fillFrames(box);
     previewUse(box, b.dataset.useopen);
@@ -885,6 +987,7 @@ async function renderPictures() {
     const done = await api('/api/pictures/use', settings);
     if (done) load();
   });
+  wasUsing.forEach(name => { const b = $('picList').querySelector(`[data-useopen="${CSS.escape(name)}"]`); if (b) b.click(); });
 }
 $('bigPic').onclick = () => { $('bigPic').style.display = 'none'; };
 $('clearRefs').onclick = () => { refs.splice(0); renderPictures(); };
@@ -905,33 +1008,41 @@ async function touchUp(settings) {
 }
 
 // ---------- Pictures tab: "In game" view of a picture ----------
-// gameView[name] = true/false when that tile was switched by hand; otherwise the "every picture" box decides
+// gameView[name] = true/false when that tile was switched by hand; otherwise View: Pictures / In game decides
 const gameView = {}, gameCache = {};
-const inGame = name => name in gameView ? gameView[name] : $('gameAll').checked;
-$('gameAll').checked = store.get('gameAll', '') === '1';
-$('gameAll').onchange = () => {
-  store.set('gameAll', $('gameAll').checked ? '1' : '');
+let allInGame = store.get('gameAll', '') === '1';
+const inGame = name => name in gameView ? gameView[name] : allInGame;
+document.querySelectorAll('#picView button').forEach(b => b.onclick = () => {
+  allInGame = b.dataset.all === '1';
+  store.set('gameAll', allInGame ? '1' : '');
   Object.keys(gameView).forEach(k => delete gameView[k]);
+  document.querySelectorAll('#picView button').forEach(x => x.classList.toggle('on', x === b));
   (picCache || []).forEach(p => showInGame(p.name));
-};
+});
+document.querySelectorAll('#picShow button').forEach(b => b.onclick = () => {
+  picShow = b.dataset.show;
+  store.set('picShow', picShow);
+  renderPictures();
+});
+const floorColor = () => ($('animFloor') && $('animFloor').value) || store.get('animFloor', '') || Object.values(floors())[0];
 
 // the asset a picture is for: the one it was made for, else the one picked under "Use as asset…"
 function pictureAsset(name) {
   const m = pictureMeta(name), box = document.getElementById('use-' + name);
-  const picked = m.for || (box && box.classList.contains('open') && box.querySelector('.asset').value) || '';
+  const picked = m.for || (box && box.closest('.pic').classList.contains('using') && box.querySelector('.asset').value) || '';
   return S.assets.find(a => a.id === picked && Array.isArray(a.size));
 }
 
 async function showInGame(name) {
   const card = document.getElementById('use-' + name) && document.getElementById('use-' + name).closest('.pic');
   if (!card) return;
-  const on = inGame(name), button = card.querySelector('[data-game]'), view = card.querySelector('.gameview');
+  const on = inGame(name), view = card.querySelector('.gameview');
   card.classList.toggle('ingame', on);
-  button.textContent = on ? 'Picture' : 'In game';
+  card.querySelectorAll('[data-game]').forEach(b => b.classList.toggle('on', (b.dataset.to === '1') === on));
   if (!on) return;
-  const a = pictureAsset(name), floor = ($('animFloor') && $('animFloor').value) || store.get('animFloor', '') || Object.values(floors())[0];
+  const a = pictureAsset(name), floor = floorColor();
   view.style.background = floor;
-  if (!a) { view.innerHTML = 'Which sprite is it for? Pick one under <b>Use as asset…</b>, then press <b>In game</b> again.'; return; }
+  if (!a) { view.innerHTML = 'Which sprite is it for? Open <b>Use as asset…</b> and pick one.'; return; }
   const key = `${name}|${a.id}`;
   if (!gameCache[key]) {
     view.innerHTML = 'Shrinking…';

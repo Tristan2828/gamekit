@@ -242,6 +242,13 @@ Pictures from a description (FLUX.2 klein), on your graphics card.
    **Seed**: leave empty for new versions.
 4. **Make it**. Click any picture to see it full size.
 
+**Each picture tile** shows the asset it's for and the words that matter (**Details** shows the whole description,
+size, seed, date and file name). On the picture: badges (cut-out, sprite, touch-up draft), a **star** for your
+favourites, and a **Picture / In game** switch. Under it, **Use as asset…** and **Animate…**, then small icon
+buttons (hover for their names): cut out (scissors), another take, adjust, work from this, and **remove** (red,
+on the right; it moves the picture to `pictures/_removed`). Above the tiles, **Show** picks All, **★ Starred** or
+**Sprites** (sprite tiles and touch-up drafts), and **View** shows every tile as a picture or in game.
+
 **Work from this** starts the next pictures from that one: the new picture keeps the creature's look, and the words
 say only what changes (a pose button: **walk 1**, **walk 2**, **attack**, **wings up**...).
 
@@ -259,11 +266,11 @@ say only what changes (a pose button: **walk 1**, **walk 2**, **attack**, **wing
    stays in place and keeps its size from frame to frame (shrinking them one at a time would make it jitter).
 
 **In game** on a picture switches it to the sprite it would become (shrunk, outlined, on the palette) at the size
-the game shows it, on your floor color; press **Picture** to switch back. **Show every picture as it looks in game**
-above the list switches them all. It uses the asset the picture was made for (For asset, Animate), or the one you
-pick under **Use as asset…**. Nothing is saved.
+the game shows it, on your floor color; **Picture** switches back. **View: In game** above the list switches them
+all. It uses the asset the picture was made for (For asset, Animate), or the one you pick under **Use as asset…**.
+Nothing is saved.
 
-**Make sprite** (under **Use as asset…**) keeps the game-sized sprite as a new tile in your pictures, marked
+**Keep as a sprite tile** (under **Use as asset…**) keeps the game-sized sprite as a new tile in your pictures, marked
 "Sprite for shambler" and shown pixel-sharp. Make a few from different pictures and compare them side by side,
 with **In game** too. A sprite tile can be used as the asset as it is, or touched up.
 
@@ -278,13 +285,14 @@ the walk frames' movement), and the tiles update. Press **Use** on a draft when 
 shown on a checkerboard and marked "cut-out". It keeps soft edges and the gaps between arms and body, which the
 simple background removal can miss. Cut out before you use a picture as a sprite.
 
-**Use as asset…** turns a picture into one of the game's images:
-- Pick the asset and, for animated sprites, **which frame** (`shambler`, `shambler_walk_1`, `shambler_walk_2`).
+**Use as asset…** opens the tile across the whole row, with the picture on the left and three steps on the right:
+- Pick **which sprite** and, for animated sprites, **which frame** (`shambler`, `shambler_walk_1`, `shambler_walk_2`).
   Each frame is its own file, so use one picture per frame.
-- **Remove the background**, **Snap to the palette** (never to the reserved player colors) and the **1 px
-  outline** follow the game's sprite rules.
-- The **preview** shows exactly what **Use** will save, at its real size and zoomed in. Change the options and
-  it updates.
+- **Shrinking**: **Remove background**, **Snap to palette** (never to the reserved player colors) and
+  **Outline** follow the game's sprite rules; switch any of them off.
+- **What it makes** shows exactly what will be saved, zoomed in and in game. Change the options and it updates.
+- Then **Use in game** (replaces the sprite in your game), **Keep as a sprite tile**, or **Touch up with Claude**.
+  Only **Use in game** changes the game.
 
 How shrinking works: each sprite pixel takes the most common palette color in its patch of the picture, matched
 by hue. So small details such as red eyes keep their color instead of turning into a brown-grey average.
