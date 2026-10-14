@@ -126,8 +126,8 @@
   .pic.kept { border-color: var(--accent-dim); }
   .pic .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
   .pic .tags:empty { display: none; }
-  .pic .tag { border: 1px solid var(--line); color: var(--dim); font-size: 11px; padding: 0 7px; border-radius: 10px; }
-  .pic .tag.draft { border-color: var(--warn); color: var(--warn); }
+  .pic .tag { background: #36423e; color: #d5dfda; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; }
+  .pic .tag.draft { background: #4a3d1f; color: #f0c766; }
   .pic.from { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   button.iconbtn.on { color: var(--accent); border-color: var(--accent); }
   .pic .star { position: absolute; top: 5px; right: 5px; padding: 5px; line-height: 0; border: 0; border-radius: 20px; background: rgba(0,0,0,.6); color: #c9d3cf; }
@@ -177,6 +177,7 @@
   #animPanel .slot b { font-size: 12.5px; }
   #animPanel .slot img.thumb { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px; margin-top: 6px;
     background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 12px 12px; }
+  #animPanel .slot img.thumb.px { image-rendering: pixelated; }
   #animPanel .slot select { width: 100%; font-size: 12.5px; padding: 4px 6px; margin-top: 6px; }
   #animPanel .slot textarea { min-height: 70px; font-size: 12px; margin-top: 6px; }
   #animPanel .players { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin: 10px 0; }
@@ -867,12 +868,15 @@ async function renderPictures() {
     const info = [['Description', m.prompt], ['Size', m.width && `${m.width}×${m.height}`], ['Seed', m.seed],
       ['Made from', sprite ? m.sprite_of : m.refs && m.refs.length ? m.refs.join(', ') : ''], ['Made', m.made], ['File', p.name]]
       .filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
-    const tools = sprite ? '' : [
+    const animateButton = `<button class="iconbtn" data-animate="${n}" title="${sprite
+      ? 'Animate this sprite: Claude draws the other frames from it, pixel by pixel'
+      : 'Animate: make this creature into an animation, one picture per frame, played back before saving'}">${icon('walk')}</button>`;
+    const tools = sprite ? animateButton : [
       m.cutout_of ? '' : `<button class="iconbtn" data-cut="${n}" title="${cutReady ? 'Cut out: a copy with the background made transparent (AI, about 10 s)' : 'Cut out: sets up the cut-out engine first (about 300 MB, once)'}">${icon('cut')}</button>`,
-      `<button class="iconbtn" data-again="${n}" title="Another take: same description, new seed">${icon('again')}</button>`,
-      `<button class="iconbtn" data-adjust="${n}" title="Adjust: put its settings back in the form">${icon('adjust')}</button>`,
+      `<button class="iconbtn" data-again="${n}" title="Another take: makes one more right away (same words and size, a new seed)">${icon('again')}</button>`,
+      `<button class="iconbtn" data-adjust="${n}" title="Edit and make again: puts its words, size and seed in the form, so you can change something first">${icon('adjust')}</button>`,
       `<button class="iconbtn${refs.includes(p.name) ? ' on' : ''}" data-from="${n}" title="${refs.includes(p.name) ? 'Working from this: the next pictures keep its look (press again to stop)' : 'Work from this: the next pictures keep this creature\'s look; you describe only what changes (a pose, a view)'}">${icon('from')}</button>`,
-      `<button class="iconbtn" data-animate="${n}" title="Animate: make this creature into an animation, one picture per frame, played back before saving">${icon('walk')}</button>`].join('');
+      animateButton].join('');
     return `<div class="card pic${m.kept ? ' kept' : ''}${refs.includes(p.name) ? ' from' : ''}" data-name="${n}">
      <div class="side">
       <div class="shotwrap">
@@ -1019,8 +1023,9 @@ async function touchUp(settings) {
   const done = await api('/api/touchup', settings);
   if (!done) return;
   showStatus(done.message, false);  // new picture tiles; nothing goes into the game until one is used
-  renderPictures();
-  $('picList').scrollIntoView({ behavior: 'smooth' });
+  await renderPictures();
+  if (!settings.every_frame) $('picList').scrollIntoView({ behavior: 'smooth' });
+  return done;
 }
 
 // Work from this: the next pictures are made from this one (FLUX keeps its look), so the words say only what
@@ -1089,16 +1094,22 @@ async function showInGame(name) {
 }
 
 // ---------- Pictures tab: animation ----------
-// anim = {id, base, slots: {frame: picture}, poses: {frame: words}} while the panel is open
+// anim = {id, base, sprite, slots: {frame: picture}, poses: {frame: words}} while the panel is open. With sprite set
+// (opened from a sprite tile) the frames are game-sized sprites: too small for the AI to draw new frames, so Claude
+// draws the missing ones (touch-up drafts) instead.
 let anim = null, animTimer = null, animFrames = {};
 const animatedAssets = () => imageAssets().filter(a => a.targets.length > 1);
 const pictureMeta = name => ((picCache || []).find(p => p.name === name) || {}).meta || {};
 
 function openAnimation(name) {
   const m = pictureMeta(name), assets = animatedAssets();
-  const id = assets.some(a => a.id === m.for) ? m.for : (assets[0] || {}).id;
+  if (m.sprite_of && !assets.some(a => a.id === m.for)) {
+    showStatus(`${m.for} isn't animated in assets.yaml: it needs more than one frame in frames:, and frame_files: true.`, false, true);
+    return;
+  }
+  const id =assets.some(a => a.id === m.for) ? m.for : (assets[0] || {}).id;
   if (!id) { showStatus('No animated sprites in assets.yaml (they need frames: and frame_files: true).', false, true); return; }
-  anim = { id, base: name, slots: {}, poses: {} };
+  anim = { id, base: name, sprite: !!m.sprite_of, slots: {}, poses: {} };
   pickAnimationAsset(id);
   $('animPanel').scrollIntoView({ behavior: 'smooth' });
 }
@@ -1109,16 +1120,29 @@ function preferCutout(name) {
   return cut ? cut.name : name;
 }
 
+// pictures that can fill a frame of the open animation: sprite tiles of the asset's size in sprite mode, else pictures
+function slotFits(p, a) {
+  const m = p.meta || {};
+  return anim.sprite ? !!m.sprite_of && m.width === a.size[0] && m.height === a.size[1] : !m.sprite_of;
+}
+// the newest picture made for a frame (cut-outs first)
+function madeFor(a, frame) {
+  return (picCache || []).filter(p => p.meta && p.meta.for === a.id && p.meta.frame === frame && slotFits(p, a))
+    .sort((x, y) => (y.meta.cutout_of ? 1 : 0) - (x.meta.cutout_of ? 1 : 0));
+}
+
 function pickAnimationAsset(id) {
-  const a = S.assets.find(x => x.id === id);
+  const a = S.assets.find(x => x.id === id), base = (picCache || []).find(p => p.name === anim.base);
   anim.id = id;
   anim.slots = {};
   anim.poses = { ...(a.poses || {}) };
-  a.targets.forEach((t, i) => {
-    // the newest picture made for this frame (cut-outs first), and the picture you started from for the first
-    const made = (picCache || []).filter(p => p.meta && p.meta.for === id && p.meta.frame === t)
-      .sort((x, y) => (y.meta.cutout_of ? 1 : 0) - (x.meta.cutout_of ? 1 : 0));
-    anim.slots[t] = made.length ? made[0].name : i === 0 ? preferCutout(anim.base) : '';
+  // the picture you started from goes in its own frame (a sprite) or the first one
+  const baseFrame = anim.sprite && a.targets.includes(pictureMeta(anim.base).frame) ? pictureMeta(anim.base).frame : a.targets[0];
+  const baseFits = base && slotFits(base, a);
+  a.targets.forEach(t => {
+    const made = madeFor(a, t);
+    if (anim.sprite && t === baseFrame && baseFits) anim.slots[t] = anim.base;
+    else anim.slots[t] = made.length ? made[0].name : t === baseFrame && baseFits ? preferCutout(anim.base) : '';
   });
   renderAnimation(true);
 }
@@ -1131,12 +1155,11 @@ function renderAnimation(changed) {
   // fill frames that are still empty with pictures made for them since (e.g. by Make the missing frames)
   a.targets.forEach(t => {
     if (anim.slots[t]) return;
-    const made = (picCache || []).filter(p => p.meta && p.meta.for === anim.id && p.meta.frame === t)
-      .sort((x, y) => (y.meta.cutout_of ? 1 : 0) - (x.meta.cutout_of ? 1 : 0));
+    const made = madeFor(a, t);
     if (made.length) { anim.slots[t] = made[0].name; changed = true; }
   });
-  const pics = picCache || [];
-  const options = slot => option('', '(none yet: make it)', !anim.slots[slot]) + pics.map(p =>
+  const pics = (picCache || []).filter(p => slotFits(p, a));
+  const options = slot => option('', anim.sprite ? '(none yet: Claude draws it)' : '(none yet: make it)', !anim.slots[slot]) + pics.map(p =>
     option(p.name, `${p.name}${p.meta && p.meta.cutout_of ? ' (cut-out)' : ''}`, p.name === anim.slots[slot])).join('');
   const missing = a.targets.filter(t => !anim.slots[t]);
   const keep = {};
@@ -1145,22 +1168,26 @@ function renderAnimation(changed) {
     <h2 style="margin-top:0">Animate <select id="animAsset" style="width:auto;display:inline-block;margin-left:6px">${animatedAssets().map(x =>
       option(x.id, `${x.id} (${x.size.join('×')}, ${Object.entries(x.frames).map(([n, c]) => n + ' ' + c).join(', ')})`, x.id === anim.id)).join('')}</select>
       <button id="animClose" style="float:right;font-size:12px">Close</button></h2>
-    <div class="hint">One picture per frame. Empty frames are made from <b>${esc(anim.slots[a.targets[0]] || anim.base)}</b> with the words under them
-      (edit them first if you like), then cut out. All frames are shrunk with the same crop, so the creature doesn't jump around.</div>
+    <div class="hint">${anim.sprite
+      ? `Animating sprites (${a.size.join('×')}): they're too small for the AI to draw new frames, so Claude draws them.
+        <b>Animate with Claude</b> adds a draft of every frame to your pictures (empty ones start as a copy of the frame before);
+        then ask Claude: <b>animate the ${esc(anim.id)} drafts</b>. Or pick sprite tiles you already have for the frames.`
+      : `One picture per frame. Empty frames are made from <b>${esc(anim.slots[a.targets[0]] || anim.base)}</b> with the words under them
+        (edit them first if you like), then cut out. All frames are shrunk with the same crop, so the creature doesn't jump around.`}</div>
     <div class="slots">${a.targets.map(t => `<div class="slot">
       <b>${esc(t)}</b>
       <select data-slot="${esc(t)}">${options(t)}</select>
-      ${anim.slots[t] ? `<img class="thumb" src="${esc((pics.find(p => p.name === anim.slots[t]) || {}).url || '')}" alt="">`
-        : `<textarea data-pose="${esc(t)}">${esc(anim.poses[t] || '')}</textarea>`}
+      ${anim.slots[t] ? `<img class="thumb${anim.sprite ? ' px' : ''}" src="${esc((pics.find(p => p.name === anim.slots[t]) || {}).url || '')}" alt="">`
+        : anim.sprite ? '<div class="hint">Empty: Claude draws it</div>' : `<textarea data-pose="${esc(t)}">${esc(anim.poses[t] || '')}</textarea>`}
     </div>`).join('')}</div>
     <div class="buttons">
-      <button class="primary" id="animMake" style="width:auto" ${missing.length ? '' : 'disabled'}>Make the missing frames${missing.length ? ` (${missing.length})` : ''}</button>
+      <button class="primary" id="animMake" style="width:auto" ${missing.length ? '' : 'disabled'}${anim.sprite ? ' hidden' : ''}>Make the missing frames${missing.length ? ` (${missing.length})` : ''}</button>
+      <button id="animTouch" ${anim.sprite ? 'class="primary" style="width:auto"' : ''} ${missing.length === a.targets.length ? 'disabled' : ''} title="Adds a draft of every frame to your pictures (frames without a picture start as a copy of the one before), with their pixels as text for Claude to fix. Nothing goes into the game.">${anim.sprite ? 'Animate with Claude' : 'Touch up with Claude'}</button>
       <button id="animUse" ${missing.length === a.targets.length ? 'disabled' : ''}>Use all frames</button>
-      <button id="animTouch" ${missing.length === a.targets.length ? 'disabled' : ''} title="Adds a draft of every frame to your pictures (frames without a picture start as a copy of the one before), with their pixels as text for Claude to fix. Nothing goes into the game.">Touch up with Claude</button>
     </div>
-    <label class="check"><input type="checkbox" class="bg" checked> Remove the background</label>
-    <label class="check"><input type="checkbox" class="snap" checked> Snap to the palette</label>
-    ${S.sprites && S.sprites.outline ? `<label class="check"><input type="checkbox" class="outline" checked> 1 px outline ${esc(S.sprites.outline)}</label>` : ''}
+    <label class="check"${anim.sprite ? ' hidden' : ''}><input type="checkbox" class="bg" checked> Remove the background</label>
+    <label class="check"${anim.sprite ? ' hidden' : ''}><input type="checkbox" class="snap" checked> Snap to the palette</label>
+    ${S.sprites && S.sprites.outline ? `<label class="check"${anim.sprite ? ' hidden' : ''}><input type="checkbox" class="outline" checked> 1 px outline ${esc(S.sprites.outline)}</label>` : ''}
     <div class="row"><div><label for="animFps">Speed <span id="animFpsText"></span></label>
       <input type="range" id="animFps" min="1" max="12" value="${store.get('animFps', '5')}" style="width:100%;accent-color:var(--accent)"></div>
       <div><label for="animFloor">Floor (for "in game")</label><select id="animFloor">${Object.entries(floors()).map(([name, color]) =>
@@ -1181,7 +1208,10 @@ function renderAnimation(changed) {
     a.targets.filter(t => !anim.slots[t]).forEach(t => poses[t] = anim.poses[t] || '');
     startJob('/api/pictures/frames', { id: anim.id, name: anim.slots[a.targets[0]] || anim.base, poses });
   };
-  $('animTouch').onclick = () => touchUp({ ...animSettings(), every_frame: true });
+  $('animTouch').onclick = async () => {
+    const done = await touchUp({ ...animSettings(), every_frame: true });
+    if (done && anim && anim.sprite) { anim.slots = {}; renderAnimation(true); }  // the frames are the new drafts now
+  };
   $('animUse').onclick = async () => {
     const done = await api('/api/pictures/animation/use', animSettings());
     if (done) load();

@@ -245,9 +245,11 @@ Pictures from a description (FLUX.2 klein), on your graphics card.
 **Each picture tile** shows the asset it's for and the words that matter, with tags under them (sprite and its
 size, cut-out, touch-up draft, worked from a picture). **Details** shows the whole description, size, seed, date
 and file name. On the picture: a **star** for your favourites and a **Picture / In game** switch. Under it,
-**Use as asset…**, then small icon buttons (hover for their names): cut out (scissors), another take, adjust,
-work from this, animate (a walking person), and **remove** (red, on the right; it moves the picture to
-`pictures/_removed`). Sprite tiles have **Use in game…** and **Touch up with Claude** instead. Above the tiles, **Show** picks All, **★ Starred** or
+**Use as asset…**, then small icon buttons (hover for their names): cut out (scissors), **another take** (one
+more right away: same words and size, new seed), **edit and make again** (pencil: puts its words, size and seed in
+the form so you can change something first; with the same seed, a small change in the words gives a close
+variation), work from this, animate (a walking person), and **remove** (red, on the right; it moves the picture to
+`pictures/_removed`). Sprite tiles have **Use in game…**, **Touch up with Claude** and animate. Above the tiles, **Show** picks All, **★ Starred** or
 **Sprites** (sprite tiles and touch-up drafts), and **View** shows every tile as a picture or in game.
 
 **Work from this** starts the next pictures from that one: the new pictures keep the creature's look, colors and
@@ -268,6 +270,11 @@ it again, or × under Working from, to stop.
    it again.
 4. **Use all frames** saves every frame file at once. They're all shrunk with **the same crop**, so the creature
    stays in place and keeps its size from frame to frame (shrinking them one at a time would make it jitter).
+
+**Animating a sprite** (the walking person on a sprite tile) opens the same panel with game-sized sprites in the
+frames. They're too small for the AI to draw new frames, so **Animate with Claude** adds a draft of every frame to
+your pictures (empty frames start as a copy of the one before), and you ask Claude to **animate the bone_warden
+drafts**. The panel then plays the drafts; when they look right, **Use all frames**.
 
 **In game** on a picture switches it to the sprite it would become (shrunk, outlined, on the palette) at the size
 the game shows it, on your floor color; **Picture** switches back. **View: In game** above the list switches them
