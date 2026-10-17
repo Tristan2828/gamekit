@@ -632,8 +632,10 @@ def do_animation_use(loaded: manifest.Manifest, body: dict) -> dict:
         _overwrite_guard(next(paths[f] for f in chosen if paths.get(f) and paths[f].exists()), body)
     problems = pictures.use_frames(loaded, a, chosen, background=bool(body.get("background", True)),
                                    snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)))
-    manifest.set_fields(loaded.path, a.id, {"source": "ai"} | ({"status": "draft"} if a.status == "todo" else {}))
-    return {"problems": problems, "message": f"{a.id}: saved {len(chosen)} frame{'s' if len(chosen) != 1 else ''} (source: ai)"}
+    changes, note = _picture_source(loaded, list(chosen.values()))
+    manifest.set_fields(loaded.path, a.id, changes | ({"status": "draft"} if a.status == "todo" else {}))
+    return {"problems": problems,
+            "message": f"{a.id}: saved {len(chosen)} frame{'s' if len(chosen) != 1 else ''} (source: {changes['source']}){note}"}
 
 
 def do_save_sprite(loaded: manifest.Manifest, body: dict) -> dict:
@@ -698,9 +700,30 @@ def do_use_picture(loaded: manifest.Manifest, body: dict) -> dict:
     problems = pictures.use_as_asset(loaded, a, str(body.get("name", "")), background=bool(body.get("background", True)),
                                      snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)),
                                      frame=frame)
-    changes = {"source": "ai"} | ({"status": "draft"} if a.status == "todo" else {})
-    manifest.set_fields(loaded.path, a.id, changes)
-    return {"problems": problems, "message": f"{frame or a.id} now uses {body.get('name')} (source: ai)"}
+    changes, note = _picture_source(loaded, [str(body.get("name", ""))])
+    manifest.set_fields(loaded.path, a.id, changes | ({"status": "draft"} if a.status == "todo" else {}))
+    return {"problems": problems, "message": f"{frame or a.id} now uses {body.get('name')} (source: {changes['source']}){note}"}
+
+
+def _picture_source(loaded: manifest.Manifest, names: list[str]) -> tuple[dict[str, str], str]:
+    """Where used pictures' art comes from, for assets.yaml: pictures copied from one pack are that pack's art
+    (source: pack, its license); anything else is AI art. AI art worked from pack art gets a note naming the
+    packs whose licenses ask for something, so the user can check (CC0 needs nothing)."""
+    metas = [pictures.read_meta(pictures.path_of(loaded, name)) for name in names]
+    own = {str(m.get("pack") or "") for m in metas}
+    if len(own) == 1 and "" not in own:
+        return {"source": "pack", "license": "{pack: " + own.pop() + "}"}, ""
+    used = sorted({p for m in metas for p in pictures.packs_of(m)})
+    check = []
+    for name in used:
+        try:
+            lic = packs.load(loaded.root, name).license.get("name", "")
+        except packs.PackError:
+            lic = ""
+        if not re.search(r"\bCC0\b|public domain", lic, re.I):
+            check.append(f"{name} ({lic or 'license not set'})")
+    note = f". Made from pack art: check that {', '.join(check)} allows that, and credit it if asked" if check else ""
+    return {"source": "ai"}, note
 
 
 def do_preview_picture(loaded: manifest.Manifest, body: dict) -> dict:
@@ -712,6 +735,111 @@ def do_preview_picture(loaded: manifest.Manifest, body: dict) -> dict:
     sprite.save(buffer, "PNG")
     return {"image": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii"),
             "width": sprite.width, "height": sprite.height}
+
+
+# --- packs: downloaded asset packs ---------------------------------------------------------------------
+
+def _pack(loaded: manifest.Manifest, body: dict, licensed: bool = False) -> packs.Pack:
+    pack = packs.load(loaded.root, str(body.get("pack", "")))
+    if licensed and not pack.has_license():
+        raise UserError(f"{pack.name}: record its license first (name and who to credit, from its license file)")
+    return pack
+
+
+def _box(body: dict) -> list[int] | None:
+    box = body.get("box")
+    if box in (None, "", []):
+        return None
+    if not isinstance(box, list) or len(box) != 4 or not all(isinstance(v, int) for v in box):
+        raise UserError("box: [x, y, width, height] in whole pixels")
+    return box
+
+
+def do_packs(loaded: manifest.Manifest, body: dict) -> dict:
+    """Every pack (license, license files with their hints, shortlist) and the downloads not imported yet."""
+    out = []
+    for pack in packs.all_packs(loaded.root):
+        hints = dict(packs.license_hints(pack))
+        files = [{"file": rel, "url": file_url(loaded.root, pack.files_dir / rel), "hints": hints.get(rel, [])}
+                 for rel in packs.license_files(pack)[:10]]
+        files += [{"file": rel.as_posix(), "url": file_url(loaded.root, pack.files_dir / rel), "hints": []}
+                  for rel in packs.list_files(pack) if rel.suffix.lower() == ".pdf" and len(rel.parts) <= 3][:5]
+        out.append({"name": pack.name, "license": pack.license, "has_license": pack.has_license(),
+                    "source_url": pack.source_url, "download": pack.download, "notes": pack.notes,
+                    "starred": pack.starred, "license_files": files})
+    return {"packs": out, "downloads": packs.downloads(loaded.root), "folder": str(packs.packs_dir(loaded.root))}
+
+
+def do_pack_images(loaded: manifest.Manifest, body: dict) -> dict:
+    pack = _pack(loaded, body)
+    return {"images": [i | {"url": file_url(loaded.root, pack.files_dir / i["file"])} for i in packs.images(pack)]}
+
+
+def do_pack_import(loaded: manifest.Manifest, body: dict) -> dict:
+    """Imports a download from packs/ (a .zip, .rar, .7z or folder) as packs/<name>/; the original stays."""
+    download = str(body.get("download", ""))
+    source = packs.packs_dir(loaded.root) / download
+    if not download or "/" in download or "\\" in download or download.startswith((".", "_")) or not source.exists():
+        raise UserError(f"no download called {download!r} in packs/")
+    pack = packs.add(loaded.root, source, str(body.get("name", "")).strip())
+    pack.source_url = str(body.get("url", "") or "").strip()
+    packs.save(pack)
+    return {"pack": pack.name, "message": f"imported {pack.name}: {len(packs.list_files(pack))} files. "
+                                          "Read its license file, then fill in the license."}
+
+
+def do_pack_license(loaded: manifest.Manifest, body: dict) -> dict:
+    pack = _pack(loaded, body)
+    pack.license = {k: str(body.get(k, "") or "").strip() for k in ("name", "author", "url")}
+    if "source_url" in body:
+        pack.source_url = str(body.get("source_url") or "").strip()
+    packs.save(pack)
+    return {"message": f"{pack.name}: license saved" if pack.has_license()
+            else f"{pack.name}: saved; it still needs a license name and who to credit"}
+
+
+def do_pack_star(loaded: manifest.Manifest, body: dict) -> dict:
+    packs.star(_pack(loaded, body), str(body.get("file", "")), bool(body.get("starred", True)))
+    return {"message": ""}
+
+
+def _pack_sprite(loaded: manifest.Manifest, body: dict) -> tuple[manifest.Asset, Image.Image]:
+    a = find(loaded, str(body.get("id", "")))
+    part = packs.cut(_pack(loaded, body), str(body.get("file", "")), _box(body))
+    return a, packs.to_sprite(loaded, a, part, bool(body.get("snap")), bool(body.get("outline")))
+
+
+def do_pack_preview(loaded: manifest.Manifest, body: dict) -> dict:
+    """What Use in game would make from the boxed part, without saving."""
+    _, sprite = _pack_sprite(loaded, body)
+    buffer = io.BytesIO()
+    sprite.save(buffer, "PNG")
+    return {"image": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii"),
+            "width": sprite.width, "height": sprite.height}
+
+
+def do_pack_use(loaded: manifest.Manifest, body: dict) -> dict:
+    """The boxed part of a pack image becomes an asset's file (or one frame): source pack, its license."""
+    pack = _pack(loaded, body, licensed=True)
+    a = find(loaded, str(body.get("id", "")))
+    frame = pictures.check_frame(loaded, a, str(body.get("frame") or ""))
+    frames = {path.stem: path for _, _, path in loaded.frame_paths(a)}
+    _overwrite_guard(frames.get(frame, loaded.asset_path(a)), body)
+    _, sprite = _pack_sprite(loaded, body)
+    problems = pictures.save_as_asset(loaded, a, sprite, frame)
+    changes = {"source": "pack", "license": "{pack: " + pack.name + "}"}
+    manifest.set_fields(loaded.path, a.id, changes | ({"status": "draft"} if a.status == "todo" else {}))
+    return {"problems": problems, "message": f"{frame} now uses {pack.name}: {body.get('file')} (source: pack)"}
+
+
+def do_pack_to_picture(loaded: manifest.Manifest, body: dict) -> dict:
+    """Copies the boxed part into pictures/, enlarged, to work from with AI, use or touch up there."""
+    pack = _pack(loaded, body, licensed=True)
+    for_id = str(body.get("for") or "")
+    if for_id:
+        find(loaded, for_id)
+    path = packs.to_picture(loaded, pack, str(body.get("file", "")), _box(body), for_id)
+    return {"made": [path.name], "message": f"copied to your pictures as {path.name}: see the Pictures tab"}
 
 
 # --- AI music takes -----------------------------------------------------------------------------------
@@ -891,6 +1019,9 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
     "/api/pictures/animation/use": do_animation_use, "/api/touchup": do_touchup,
     "/api/pictures/sprite": do_save_sprite,
     "/api/pictures/cutout": do_cutout_picture, "/api/pictures/use": do_use_picture,
+    "/api/packs": do_packs, "/api/packs/images": do_pack_images, "/api/packs/import": do_pack_import,
+    "/api/packs/license": do_pack_license, "/api/packs/star": do_pack_star, "/api/packs/preview": do_pack_preview,
+    "/api/packs/use": do_pack_use, "/api/packs/topicture": do_pack_to_picture,
     "/api/status": do_status, "/api/validate": do_validate, "/api/check": do_check, "/api/credits": do_credits,
     "/api/open-folder": do_open_folder, "/api/info": do_info,
     "/api/sfx/takes": do_takes, "/api/sfx/make": do_make_takes, "/api/sfx/keep": do_keep,
@@ -902,7 +1033,8 @@ POST: dict[str, Callable[[manifest.Manifest, dict], dict]] = {
 READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate", "/api/job", "/api/cancel", "/api/pictures",
              "/api/engines/setup", "/api/pictures/make", "/api/musictakes", "/api/musictakes/make", "/api/takes",
              "/api/sounds/make", "/api/voices/make", "/api/pictures/cutout",
-             "/api/pictures/preview", "/api/pictures/frames", "/api/pictures/animation"}
+             "/api/pictures/preview", "/api/pictures/frames", "/api/pictures/animation",
+             "/api/packs", "/api/packs/images", "/api/packs/preview"}
 
 
 # --- the server ------------------------------------------------------------------------------------
@@ -1027,12 +1159,18 @@ def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
+class PageServer(ThreadingHTTPServer):
+    # The default queue (5) makes Windows refuse connections when a tab asks for
+    # hundreds of thumbnails at once (the Packs grid), so some images never load.
+    request_queue_size = 256
+
+
 def make_server(manifest_path: Path, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
     """The server on the first free port from `port` (0: any free port, for tests)."""
     manifest.load(manifest_path)  # fail early with a clear message if the manifest is missing
     for candidate in ([port] if port == 0 else range(port, port + 10)):
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(manifest_path.resolve()))
+            server = PageServer(("127.0.0.1", candidate), make_handler(manifest_path.resolve()))
             return server
         except OSError:
             continue

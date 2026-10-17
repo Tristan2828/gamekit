@@ -106,7 +106,7 @@
   .tile .buttons button { font-size: 12.5px; padding: 3px 9px; }
   .empty { color: var(--dim); padding: 30px 0; text-align: center; }
   .tab { display: none; }
-  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures, body[data-tab=voices] .tab.voices, body[data-tab=models] .tab.models { display: block; }
+  body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures, body[data-tab=voices] .tab.voices, body[data-tab=models] .tab.models, body[data-tab=packs] .tab.packs { display: block; }
   textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
   /* Pictures tab: a toolbar (filter, view), then a grid of tiles. A tile whose "Use as asset" is open spans the row. */
   .picbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: -4px 0 12px; font-size: 12.5px; color: var(--dim); }
@@ -198,6 +198,40 @@
   .refs img { width: 40px; height: 40px; object-fit: contain; border-radius: 4px; background: #0b0e0d; }
   .refs button { border: 0; background: none; padding: 2px; line-height: 0; color: var(--dim); }
   #refBox { border: 1px solid var(--accent-dim); border-radius: 8px; padding: 2px 10px 10px; margin-top: 12px; background: #142520; }
+  /* Packs tab: downloads and packs on the left; the cutter (a box drawn on one image) and a grid of every image on the right */
+  .pill.cc0 { border-color: var(--good); color: var(--good); } .pill.credit { border-color: var(--accent-dim); color: var(--accent); }
+  .pill.unset { border-color: var(--warn); color: var(--warn); }
+  .packcard { padding: 10px 12px; }
+  .packcard.on { border-color: var(--accent); }
+  .packcard h3 { font-size: 14px; cursor: pointer; }
+  .packcard .files { font-size: 12.5px; margin: 6px 0 0; padding-left: 16px; }
+  .packcard .files a { color: var(--accent); }
+  .packcard input { padding: 5px 8px; font-size: 13px; }
+  .packcard label { margin: 8px 0 3px; font-size: 12px; }
+  .download { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: end; padding: 10px 12px; }
+  .download .meta { grid-column: 1 / -1; margin: 0; }
+  .download input { padding: 5px 8px; font-size: 13px; }
+  .packgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .ptile { border: 1px solid var(--line); border-radius: 8px; background: var(--raised); padding: 8px; min-width: 0; position: relative; }
+  .ptile.open { border-color: var(--accent); }
+  .ptile .pimg { height: 110px; border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer;
+    background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 12px 12px; }
+  .ptile .pimg img { image-rendering: pixelated; max-width: 100%; max-height: 100%; object-fit: contain; }
+  .ptile .fname { font-size: 12.5px; margin-top: 5px; overflow-wrap: anywhere; }
+  .ptile .meta { color: var(--dim); font-size: 11.5px; overflow-wrap: anywhere; }
+  .ptile .star { position: absolute; top: 12px; right: 12px; padding: 4px; line-height: 0; border: 0; border-radius: 20px; background: rgba(0,0,0,.6); color: #c9d3cf; }
+  .ptile .star.on { color: #f2c94c; }
+  #cutter { display: none; margin-bottom: 18px; padding: 14px; border: 1px solid var(--accent); border-radius: 10px; }
+  #cutter.open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 330px); gap: 18px; }
+  @media (max-width: 1100px) { #cutter.open { grid-template-columns: 1fr; } }
+  #cutter .canvaswrap { max-height: 62vh; overflow: auto; border-radius: 6px; background: repeating-conic-gradient(#2a2f2d 0 25%, #1a1e1c 0 50%) 0 0 / 16px 16px; }
+  #cutter canvas { display: block; cursor: crosshair; image-rendering: pixelated; }
+  #cutter .row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  #cutter .row4 input { padding: 5px 6px; font-size: 13px; }
+  #cutter .bar2 { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; font-size: 12.5px; color: var(--dim); }
+  #cutter .bar2 input[type=number] { width: 64px; padding: 3px 6px; font-size: 12.5px; }
+  #cutter .bar2 button { font-size: 12.5px; padding: 3px 10px; }
+  #cutter .use { display: block; }
   #statusStop { display: none; }
   .soon { color: var(--dim); font-size: 12.5px; }
 </style>
@@ -208,7 +242,7 @@
   <div class="game"><span>Game</span><b id="gameName">…</b><button id="openFolder" title="Open the game's folder">Folder</button><button id="refresh" title="Read assets.yaml again">Refresh</button></div>
   <nav>
     <button data-tab="assets" class="on">Assets</button>
-    <div class="group"><span>2D</span><button data-tab="art">Art</button><button data-tab="pictures">Pictures</button></div>
+    <div class="group"><span>2D</span><button data-tab="art">Art</button><button data-tab="pictures">Pictures</button><button data-tab="packs">Packs</button></div>
     <div class="group"><span>3D</span><button data-tab="models" title="Not built yet">Models<span class="wip">WIP</span></button></div>
     <div class="group"><span>Audio</span><button data-tab="sounds">Sounds</button><button data-tab="music">Music</button><button data-tab="voices">Voices</button></div>
   </nav>
@@ -364,6 +398,21 @@
         <div class="hint" id="pictureHint" style="margin-top:10px"></div>
       </div>
     </div>
+    <div class="tab packs">
+      <h2>New downloads</h2>
+      <div id="downloadList"></div>
+      <div class="hint">Put downloaded packs (.zip, .rar, .7z or a folder) in <code id="packsFolder">packs/</code>, then <b>Import</b>.
+        The download stays where it is; the pack is copied to <code>packs/&lt;name&gt;/</code>. Folders starting with _ are left alone.</div>
+      <h2 class="gap">Packs</h2>
+      <div id="packList"></div>
+      <h2 class="gap">Show</h2>
+      <label for="kPack">Pack</label><select id="kPack"></select>
+      <label for="kText">Search</label><input type="text" id="kText" placeholder="file name or folder, e.g. ship, explosion">
+      <label class="check"><input type="checkbox" id="kStarred"> Only the shortlist (★)</label>
+      <label class="check"><input type="checkbox" id="kSmall"> Hide tiny images (under 8 px)</label>
+      <div class="hint" style="margin-top:12px">Star images you might use. Click one to box a part of it, then <b>Use in game</b> for one of your
+        sprites, or <b>Copy to Pictures</b> to make new AI art in its style there (Work from this) or have Claude touch it up.</div>
+    </div>
     <div class="tab models">
       <div class="wip-banner">🚧 Work in progress: 3D models aren't built yet.</div>
       <h2>Coming later</h2>
@@ -414,6 +463,8 @@
         <span>View</span><div class="seg pick" id="picView" title="How every tile shows its picture; each tile can switch on its own too"><button data-all="0">Pictures</button><button data-all="1">In game</button></div>
       </div>
       <div class="pics" id="picList"></div></div>
+    <div class="tab packs"><div id="cutter"></div><h2 id="packTitle">Pack images</h2><div class="packgrid" id="packGrid"></div>
+      <div style="text-align:center;margin-top:12px"><button id="packMore" hidden>Show more</button></div></div>
     <div class="tab models wip-panel"><h2>Models</h2><div class="ghost"><div class="empty">Your 3D models will show here, each with the pictures it was made from.</div></div></div>
     <div class="tab voices"><h2 id="voiceTitle">Readings</h2><div id="voiceList"></div></div>
   </section>
@@ -502,6 +553,7 @@ function renderAll() {
   if (tab === 'music') { renderMusic(); renderMusicTakes(); }
   if (tab === 'art') renderArt();
   if (tab === 'pictures') renderPictures();
+  if (tab === 'packs') renderPacks();
 }
 
 // ---------- shared bits ----------
@@ -861,20 +913,25 @@ async function renderPictures() {
     const tags = [m.touchup ? '<span class="tag draft">touch-up draft</span>' : sprite ? '<span class="tag">sprite</span>' : '',
       sprite ? `<span class="tag">${esc(m.width)}×${esc(m.height)}</span>` : '',
       m.cutout_of && !sprite ? '<span class="tag">cut-out</span>' : '', m.tile ? '<span class="tag">seamless</span>' : '',
-      m.refs && m.refs.length && !sprite ? '<span class="tag">worked from a picture</span>' : ''].join('');
+      m.refs && m.refs.length && !sprite ? '<span class="tag">worked from a picture</span>' : '',
+      m.pack ? `<span class="tag" title="Copied from the ${esc(m.pack)} pack: Use in game records the pack's license">from pack ${esc(m.pack)}</span>` : '',
+      !m.pack && m.packs && m.packs.length ? `<span class="tag" title="AI art made from pack art: check that the pack's license allows it">from pack art (${esc(m.packs.join(', '))})</span>` : ''].join('');
     const frame = m.frame && m.frame !== m.for ? ' · ' + esc(m.frame) : '';
     const title = sprite ? `<span class="for">${esc(m.for)}${frame}</span>${m.copy_of ? ' · copied from ' + esc(m.copy_of) : ''}`
       : `${m.for ? `<span class="for">${esc(m.for)}</span> · ` : ''}${esc(shortPrompt(m.prompt) || p.name)}`;
     const info = [['Description', m.prompt], ['Size', m.width && `${m.width}×${m.height}`], ['Seed', m.seed],
-      ['Made from', sprite ? m.sprite_of : m.refs && m.refs.length ? m.refs.join(', ') : ''], ['Made', m.made], ['File', p.name]]
+      ['Made from', sprite ? m.sprite_of : m.refs && m.refs.length ? m.refs.join(', ') : ''],
+      ['Pack', m.pack ? `${m.pack}: ${m.pack_file}${m.box ? ' (box ' + m.box.join(', ') + ')' : ''}` : (m.packs || []).join(', ')],
+      ['Made', m.made], ['File', p.name]]
       .filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
     const animateButton = `<button class="iconbtn" data-animate="${n}" title="${sprite
       ? 'Animate this sprite: Claude draws the other frames from it, pixel by pixel'
       : 'Animate: make this creature into an animation, one picture per frame, played back before saving'}">${icon('walk')}</button>`;
+    const copied = !!m.pack && !m.seed;  // copied from a pack, not made by the AI: nothing to make again
     const tools = sprite ? animateButton : [
-      m.cutout_of ? '' : `<button class="iconbtn" data-cut="${n}" title="${cutReady ? 'Cut out: a copy with the background made transparent (AI, about 10 s)' : 'Cut out: sets up the cut-out engine first (about 300 MB, once)'}">${icon('cut')}</button>`,
-      `<button class="iconbtn" data-again="${n}" title="Another take: makes one more right away (same words and size, a new seed)">${icon('again')}</button>`,
-      `<button class="iconbtn" data-adjust="${n}" title="Edit and make again: puts its words, size and seed in the form, so you can change something first">${icon('adjust')}</button>`,
+      m.cutout_of || copied ? '' : `<button class="iconbtn" data-cut="${n}" title="${cutReady ? 'Cut out: a copy with the background made transparent (AI, about 10 s)' : 'Cut out: sets up the cut-out engine first (about 300 MB, once)'}">${icon('cut')}</button>`,
+      copied ? '' : `<button class="iconbtn" data-again="${n}" title="Another take: makes one more right away (same words and size, a new seed)">${icon('again')}</button>`,
+      copied ? '' : `<button class="iconbtn" data-adjust="${n}" title="Edit and make again: puts its words, size and seed in the form, so you can change something first">${icon('adjust')}</button>`,
       `<button class="iconbtn${refs.includes(p.name) ? ' on' : ''}" data-from="${n}" title="${refs.includes(p.name) ? 'Working from this: the next pictures keep its look (press again to stop)' : 'Work from this: the next pictures keep this creature\'s look; you describe only what changes (a pose, a view)'}">${icon('from')}</button>`,
       animateButton].join('');
     return `<div class="card pic${m.kept ? ' kept' : ''}${refs.includes(p.name) ? ' from' : ''}" data-name="${n}">
@@ -1258,6 +1315,300 @@ function playAnimation() {
   };
   show();
   animTimer = setInterval(show, 1000 / (+$('animFps').value || 5));
+}
+
+// ---------- Packs tab ----------
+// Downloads waiting in packs/ are imported into packs/<name>/ with a pack.yaml (its license). Images can be starred (a
+// shortlist in pack.yaml), and a box drawn on one: the boxed part becomes a sprite (Use in game) or a picture.
+let packData = null;              // the last /api/packs
+const packImages = {};            // pack name -> its images [{file, width, height, url}]
+let packLimit = 120;              // tiles shown before "Show more"
+let cutter = null;                // the image being boxed: {pack, file, url, width, height, box, zoom, grid, gw, gh, img, id, frame}
+const licenseKind = p => !p.has_license ? 'unset' : /\bCC0\b|public domain/i.test(p.license.name) ? 'cc0' : 'credit';
+const LICENSE_TIPS = { unset: 'No license recorded yet: nothing can be used from this pack until it is',
+  cc0: 'CC0 / public domain: free to use, no credit needed', credit: 'Check what this license asks: usually a credit in CREDITS.md' };
+const licensePill = p => `<span class="pill ${licenseKind(p)}" title="${LICENSE_TIPS[licenseKind(p)]}">${p.has_license ? esc(p.license.name) : 'license not set'}</span>`;
+const mb = bytes => bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+const packOf = name => (packData && packData.packs.find(p => p.name === name)) || null;
+
+async function renderPacks() {
+  const data = await api('/api/packs', {}, true);
+  if (!data) return;
+  packData = data;
+  $('packsFolder').textContent = data.folder;
+  $('downloadList').innerHTML = data.downloads.length ? data.downloads.map(d => `<div class="card download">
+      <div class="meta"><b style="color:var(--text)">${esc(d.name)}</b> · ${esc(d.kind)} · ${mb(d.size)}</div>
+      <input type="text" value="${esc(d.suggested)}" data-pname="${esc(d.name)}" title="The pack's short name: lowercase letters, digits, - and _">
+      <button class="go" data-import="${esc(d.name)}">Import</button></div>`).join('')
+    : '<div class="hint" style="margin-bottom:6px">Nothing new.</div>';
+  $('downloadList').querySelectorAll('[data-import]').forEach(b => b.onclick = async () => {
+    const name = $('downloadList').querySelector(`[data-pname="${CSS.escape(b.dataset.import)}"]`).value.trim();
+    const done = await api('/api/packs/import', { download: b.dataset.import, name });
+    if (!done) return;
+    store.set('packOpen', done.pack);
+    renderPacks();
+  });
+  const open = store.get('packOpen', '');
+  $('packList').innerHTML = data.packs.length ? data.packs.map(p => {
+    const n = esc(p.name), count = packImages[p.name] ? ` · ${packImages[p.name].length} images` : '';
+    const files = p.license_files.map(f => `<li><a href="${f.url}" target="_blank" rel="noopener">${esc(f.file)}</a>` +
+      (f.hints.length ? ` <span class="hint">(mentions: ${esc(f.hints.join(', '))})</span>` : '') + '</li>').join('');
+    return `<div class="card packcard${open === p.name ? ' on' : ''}">
+      <h3 data-popen="${n}" title="Show or hide its license">${n} ${licensePill(p)}</h3>
+      <div class="meta">${p.has_license ? 'credit: ' + esc(p.license.author) : 'Read its license file, then fill in the license (never a guess)'}${count}</div>
+      <div${open === p.name ? '' : ' hidden'}>
+        ${files ? `<div class="hint">License and readme files (the "mentions" are hints, not the answer):</div><ul class="files">${files}</ul>`
+          : '<div class="hint">No license file in the pack: check its download page.</div>'}
+        <div class="row"><div><label>License</label><input type="text" class="lname" value="${esc(p.license.name || '')}" placeholder="e.g. CC0, CC-BY 4.0"></div>
+          <div><label>Credit (author)</label><input type="text" class="lauthor" value="${esc(p.license.author || '')}" placeholder="who made it"></div></div>
+        <label>Link to the license or pack page</label><input type="text" class="lurl" value="${esc(p.license.url || '')}">
+        <label>Downloaded from</label><input type="text" class="lsource" value="${esc(p.source_url || '')}">
+        <div class="buttons"><button data-savelic="${n}">Save license</button></div>
+        <div class="hint">Or ask Claude: <b>record the license of the ${n} pack</b>.</div>
+      </div></div>`;
+  }).join('') : '<div class="hint">No packs yet: import a download above.</div>';
+  $('packList').querySelectorAll('[data-popen]').forEach(h => h.onclick = () => {
+    const name = h.dataset.popen;
+    store.set('packOpen', store.get('packOpen', '') === name ? '' : name);
+    if (store.get('packOpen', '')) { $('kPack').value = name; store.set('kPack', name); $('kText').value = ''; packLimit = 120; }
+    renderPacks();
+  });
+  $('packList').querySelectorAll('[data-savelic]').forEach(b => b.onclick = async () => {
+    const card = b.closest('.packcard'), v = c => card.querySelector(c).value.trim();
+    if (await api('/api/packs/license', { pack: b.dataset.savelic, name: v('.lname'), author: v('.lauthor'), url: v('.lurl'), source_url: v('.lsource') })) renderPacks();
+  });
+  fillSelect($('kPack'), [['', 'All packs'], ...data.packs.map(p => [p.name, p.name])], store.get('kPack', ''));
+  await loadPackImages();
+  renderPackGrid();
+  if (cutter) {
+    if (packOf(cutter.pack)) renderCutter(); else closeCutter();
+  }
+}
+
+async function loadPackImages() {
+  for (const p of packData.packs) {
+    if (packImages[p.name] || ($('kPack').value && $('kPack').value !== p.name)) continue;
+    const data = await api('/api/packs/images', { pack: p.name }, true);
+    if (data) packImages[p.name] = data.images;
+  }
+}
+
+function shownPackImages() {
+  const only = $('kPack').value, text = $('kText').value.trim().toLowerCase(), starred = $('kStarred').checked, noSmall = $('kSmall').checked;
+  const out = [];
+  for (const p of packData.packs) {
+    if (only && p.name !== only) continue;
+    for (const i of packImages[p.name] || []) {
+      const on = p.starred.includes(i.file);
+      if ((starred && !on) || (noSmall && Math.max(i.width, i.height) < 8)) continue;
+      if (text && !(p.name + '/' + i.file).toLowerCase().includes(text)) continue;
+      out.push({ ...i, pack: p.name, starred: on });
+    }
+  }
+  return out;
+}
+
+function renderPackGrid() {
+  if (!packData) return;
+  const all = shownPackImages(), shown = all.slice(0, packLimit);
+  $('packTitle').textContent = `Pack images (${all.length})`;
+  $('packGrid').innerHTML = shown.length ? shown.map((i, k) => {
+    const zoom = Math.max(1, Math.floor(96 / Math.max(i.width, i.height)));
+    const folder = i.file.includes('/') ? i.file.slice(0, i.file.lastIndexOf('/')) : '';
+    const open = cutter && cutter.pack === i.pack && cutter.file === i.file;
+    return `<div class="ptile${open ? ' open' : ''}">
+      <div class="pimg" data-kcut="${k}" title="Box a part of it, to use in the game or copy to your pictures"><img src="${i.url}" loading="lazy" alt="" width="${i.width * zoom}" height="${i.height * zoom}"></div>
+      <button class="star${i.starred ? ' on' : ''}" data-kstar="${k}" title="${i.starred ? 'On the shortlist: press to take it off' : 'Add to the shortlist, to find it with Only the shortlist'}">${icon('star', i.starred)}</button>
+      <div class="fname" title="${esc(i.file)}">${esc(i.file.split('/').pop())}</div>
+      <div class="meta">${i.width}×${i.height} · ${esc(i.pack)}${folder ? ' · ' + esc(folder) : ''}</div></div>`;
+  }).join('') : `<div class="empty">${packData.packs.length ? 'Nothing matches.' : 'Import a download (left) to see its images here.'}</div>`;
+  $('packMore').hidden = all.length <= packLimit;
+  $('packGrid').querySelectorAll('[data-kcut]').forEach(el => el.onclick = () => openCutter(shown[+el.dataset.kcut]));
+  $('packGrid').querySelectorAll('[data-kstar]').forEach(b => b.onclick = async () => {
+    const i = shown[+b.dataset.kstar], p = packOf(i.pack);
+    if (!await api('/api/packs/star', { pack: i.pack, file: i.file, starred: !i.starred }, true)) return;
+    p.starred = i.starred ? p.starred.filter(f => f !== i.file) : [...p.starred, i.file];
+    renderPackGrid();
+  });
+}
+$('kPack').onchange = async () => { store.set('kPack', $('kPack').value); packLimit = 120; await loadPackImages(); renderPackGrid(); };
+$('kText').oninput = () => { packLimit = 120; renderPackGrid(); };
+$('kStarred').onchange = $('kSmall').onchange = () => { packLimit = 120; renderPackGrid(); };
+$('packMore').onclick = () => { packLimit += 120; renderPackGrid(); };
+
+// ---------- Packs tab: the cutter (draw a box on one image) ----------
+function openCutter(i) {
+  const was = cutter || {};
+  cutter = { pack: i.pack, file: i.file, url: i.url, width: i.width, height: i.height, box: [0, 0, i.width, i.height],
+    zoom: Math.max(1, Math.min(16, Math.floor(560 / Math.max(i.width, i.height)))), grid: was.grid || false,
+    gw: was.gw || +store.get('cutGw', '32'), gh: was.gh || +store.get('cutGh', '32'), img: null,
+    id: was.id || store.get('cutAsset', ''), frame: '', snap: was.snap || false, outline: was.outline || false };
+  const img = new Image();
+  img.onload = () => { if (cutter && cutter.url === i.url) { cutter.img = img; drawCutter(); } };
+  img.src = i.url;
+  renderCutter();
+  renderPackGrid();
+  $('cutter').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeCutter() { cutter = null; $('cutter').classList.remove('open'); $('cutter').innerHTML = ''; renderPackGrid(); }
+
+function renderCutter() {
+  const c = cutter, p = packOf(c.pack), licensed = p && p.has_license;
+  const assets = imageAssets();
+  $('cutter').classList.add('open');
+  $('cutter').innerHTML = `<div>
+      <div class="usehead"><b>${esc(c.pack)}: ${esc(c.file)}</b><span class="hint">${c.width}×${c.height}</span></div>
+      <div class="canvaswrap"><canvas id="cutCanvas"></canvas></div>
+      <div class="bar2"><span>Zoom</span><input type="range" id="cutZoom" min="1" max="16" value="${c.zoom}" style="accent-color:var(--accent)">
+        <label class="check" style="margin:0"><input type="checkbox" id="cutGrid"${c.grid ? ' checked' : ''}> Grid</label>
+        <input type="number" id="cutGw" min="1" value="${c.gw}" title="Grid cell width"> × <input type="number" id="cutGh" min="1" value="${c.gh}" title="Grid cell height">
+        <button id="cutWhole" title="Box the whole image">Whole image</button><button id="cutTrim" title="Shrink the box to the visible pixels inside it">Trim</button></div>
+      <div class="hint">Drag on the image to draw a box. With <b>Grid</b> on (set it to the sheet's frame size), the box snaps to cells: click one cell or drag over several.</div>
+    </div>
+    <div class="use">
+      <div class="usehead"><b>Use the boxed part</b><button class="iconbtn" id="cutClose" title="Close">${icon('close')}</button></div>
+      <label>Box: x, y, width, height</label>
+      <div class="row4">${['x', 'y', 'w', 'h'].map((k, n) => `<input type="number" min="${n < 2 ? 0 : 1}" data-bi="${n}" value="${c.box[n]}" title="${k}">`).join('')}</div>
+      ${licensed ? '' : `<div class="problems" style="padding:0;list-style:none">Record ${esc(c.pack)}'s license first (left, under Packs): until then nothing can be taken from it.</div>`}
+      <div class="row"><div><label>Which sprite</label><select id="cutAsset">${option('', '(pick one)', !c.id)}${assets.map(a => option(a.id, `${a.id} (${a.size.join('×')}, ${a.status})`, a.id === c.id)).join('')}</select></div>
+        <div class="framebox"><label>Which frame</label><select id="cutFrame"></select></div></div>
+      <label>Fitting</label>
+      <div class="opts">
+        <label class="opt" title="Every pixel becomes one of the game's palette colors"><input type="checkbox" id="cutSnap"${c.snap ? ' checked' : ''}> Snap to palette</label>
+        ${S.sprites && S.sprites.outline ? `<label class="opt" title="A 1 px outline in ${esc(S.sprites.outline)} (only when the box is resized)"><input type="checkbox" id="cutOutline"${c.outline ? ' checked' : ''}> Outline</label>` : ''}
+      </div>
+      <label>What it makes</label>
+      <div class="preview"><figure class="zoomed"><img alt=""><figcaption></figcaption></figure><figure class="ingame"><div class="floor"><img alt=""></div><figcaption></figcaption></figure></div>
+      <div class="usebuttons">
+        <button class="go" id="cutUse"${licensed ? '' : ' disabled'} title="Saves it as the sprite's file (or the chosen frame): the game shows it">Use in game</button>
+        <button id="cutNext" title="Moves the box one box to the right (or to the next row) and picks the next frame: for animations laid out in a row">Next frame →</button>
+        <button id="cutPicture"${licensed ? '' : ' disabled'} title="Copies the boxed part to your pictures, enlarged: there, Work from this makes new AI art in its style, and Touch up with Claude works too. Nothing goes into the game.">Copy to Pictures</button>
+      </div>
+      <div class="hint">A box the sprite's own size is used pixel for pixel; any other size is shrunk (or grown) to fit, keeping its shape.
+        Boxes of the same size get the same scale, so animation frames line up.</div>
+    </div>`;
+  const fillFrame = () => {
+    const a = S.assets.find(x => x.id === c.id), targets = (a && a.targets) || [];
+    $('cutFrame').innerHTML = targets.map(t => option(t, t === targets[0] && targets.length > 1 ? `${t} (first frame)` : t, t === c.frame)).join('');
+    c.frame = $('cutFrame').value;
+    $('cutter').querySelector('.framebox').style.visibility = targets.length > 1 ? 'visible' : 'hidden';
+  };
+  fillFrame();
+  $('cutAsset').onchange = () => { c.id = $('cutAsset').value; store.set('cutAsset', c.id); c.frame = ''; fillFrame(); previewCut(); };
+  $('cutFrame').onchange = () => { c.frame = $('cutFrame').value; };
+  $('cutSnap').onchange = () => { c.snap = $('cutSnap').checked; previewCut(); };
+  if ($('cutOutline')) $('cutOutline').onchange = () => { c.outline = $('cutOutline').checked; previewCut(); };
+  $('cutZoom').oninput = () => { c.zoom = +$('cutZoom').value; drawCutter(); };
+  $('cutGrid').onchange = () => { c.grid = $('cutGrid').checked; drawCutter(); };
+  for (const id of ['cutGw', 'cutGh']) $(id).onchange = () => {
+    c[id === 'cutGw' ? 'gw' : 'gh'] = Math.max(1, +$(id).value || 1); store.set(id, String(c[id === 'cutGw' ? 'gw' : 'gh'])); drawCutter(); };
+  $('cutWhole').onclick = () => setBox([0, 0, c.width, c.height]);
+  $('cutTrim').onclick = trimBox;
+  $('cutClose').onclick = closeCutter;
+  $('cutter').querySelectorAll('[data-bi]').forEach(el => el.onchange = () => {
+    const box = [...c.box]; box[+el.dataset.bi] = Math.max(0, Math.round(+el.value || 0)); setBox(box); });
+  $('cutUse').onclick = async () => {
+    if (!c.id) { showStatus('Pick which sprite it is for first.', false, true); return; }
+    const done = await api('/api/packs/use', { pack: c.pack, file: c.file, box: c.box, id: c.id, frame: c.frame, snap: c.snap, outline: c.outline });
+    if (done) load();
+  };
+  $('cutNext').onclick = () => {
+    const [x, y, w, h] = c.box;
+    setBox(x + 2 * w <= c.width ? [x + w, y, w, h] : y + 2 * h <= c.height ? [0, y + h, w, h] : c.box);
+    const options = [...$('cutFrame').options], at = options.findIndex(o => o.value === c.frame);
+    if (at >= 0 && at + 1 < options.length) { $('cutFrame').value = options[at + 1].value; c.frame = $('cutFrame').value; }
+  };
+  $('cutPicture').onclick = async () => {
+    const done = await api('/api/packs/topicture', { pack: c.pack, file: c.file, box: c.box, for: c.id });
+    if (done) showStatus(done.message);
+  };
+  const canvas = $('cutCanvas');
+  let from = null, moved = false;
+  const at = e => { const r = canvas.getBoundingClientRect();
+    return [Math.min(c.width - 1, Math.max(0, Math.floor((e.clientX - r.left) / c.zoom))), Math.min(c.height - 1, Math.max(0, Math.floor((e.clientY - r.top) / c.zoom)))]; };
+  const boxFrom = (a, b) => {
+    let x0 = Math.min(a[0], b[0]), y0 = Math.min(a[1], b[1]), x1 = Math.max(a[0], b[0]) + 1, y1 = Math.max(a[1], b[1]) + 1;
+    if (c.grid) {
+      x0 = Math.floor(x0 / c.gw) * c.gw; y0 = Math.floor(y0 / c.gh) * c.gh;
+      x1 = Math.min(c.width, Math.ceil(x1 / c.gw) * c.gw); y1 = Math.min(c.height, Math.ceil(y1 / c.gh) * c.gh);
+    }
+    return [x0, y0, x1 - x0, y1 - y0];
+  };
+  canvas.onmousedown = e => { e.preventDefault(); from = at(e); moved = false; };
+  canvas.onmousemove = e => { if (!from) return; moved = true; c.box = boxFrom(from, at(e)); drawCutter(); };
+  canvas.onmouseup = e => { if (!from) return; if (moved || c.grid) setBox(boxFrom(from, at(e))); from = null; };
+  canvas.onmouseleave = () => { if (from && moved) setBox(c.box); from = null; };
+  drawCutter();
+  previewCut();
+}
+
+function setBox(box) {
+  const c = cutter;
+  let [x, y, w, h] = box.map(v => Math.max(0, Math.round(v)));
+  x = Math.min(x, c.width - 1); y = Math.min(y, c.height - 1);
+  w = Math.max(1, Math.min(w, c.width - x)); h = Math.max(1, Math.min(h, c.height - y));
+  c.box = [x, y, w, h];
+  $('cutter').querySelectorAll('[data-bi]').forEach(el => { el.value = c.box[+el.dataset.bi]; });
+  drawCutter();
+  previewCut();
+}
+
+// Trim: the box shrinks to the visible pixels inside it (read from the image itself)
+function trimBox() {
+  const c = cutter;
+  if (!c.img) return;
+  const work = document.createElement('canvas');
+  work.width = c.width; work.height = c.height;
+  const g = work.getContext('2d');
+  g.drawImage(c.img, 0, 0);
+  const [bx, by, bw, bh] = c.box, pixels = g.getImageData(bx, by, bw, bh).data;
+  let x0 = bw, y0 = bh, x1 = -1, y1 = -1;
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    if (pixels[(y * bw + x) * 4 + 3] >= 128) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  }
+  if (x1 < 0) { showStatus('Nothing visible inside the box.', false, true); return; }
+  setBox([bx + x0, by + y0, x1 - x0 + 1, y1 - y0 + 1]);
+}
+
+function drawCutter() {
+  const c = cutter, canvas = $('cutCanvas');
+  if (!c || !canvas) return;
+  const z = c.zoom;
+  canvas.width = c.width * z; canvas.height = c.height * z;
+  const g = canvas.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  if (c.img) g.drawImage(c.img, 0, 0, canvas.width, canvas.height);
+  if (c.grid && c.gw * z >= 4 && c.gh * z >= 4) {
+    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.beginPath();
+    for (let x = c.gw; x < c.width; x += c.gw) { g.moveTo(x * z + .5, 0); g.lineTo(x * z + .5, canvas.height); }
+    for (let y = c.gh; y < c.height; y += c.gh) { g.moveTo(0, y * z + .5); g.lineTo(canvas.width, y * z + .5); }
+    g.stroke();
+  }
+  const [x, y, w, h] = c.box.map(v => v * z);
+  g.fillStyle = 'rgba(0,0,0,.5)';  // dim everything outside the box
+  g.fillRect(0, 0, canvas.width, y); g.fillRect(0, y + h, canvas.width, canvas.height - y - h);
+  g.fillRect(0, y, x, h); g.fillRect(x + w, y, canvas.width - x - w, h);
+  g.strokeStyle = '#4fc39a'; g.lineWidth = 2; g.strokeRect(x + 1, y + 1, Math.max(1, w - 2), Math.max(1, h - 2));
+}
+
+let cutTimer = null;
+function previewCut() {
+  clearTimeout(cutTimer);
+  cutTimer = setTimeout(async () => {
+    const c = cutter, box = $('cutter').querySelector('.preview');
+    if (!c || !box) return;
+    const [zoomed, game] = box.querySelectorAll('figure');
+    if (!c.id) { box.querySelectorAll('img').forEach(i => i.removeAttribute('src')); zoomed.querySelector('figcaption').textContent = 'pick a sprite'; return; }
+    const data = await api('/api/packs/preview', { pack: c.pack, file: c.file, box: c.box, id: c.id, snap: c.snap, outline: c.outline }, true);
+    if (!data) return;
+    const zoom = Math.max(2, Math.floor(128 / Math.max(data.width, data.height))), scale = gameScale();
+    Object.assign(zoomed.querySelector('img'), { src: data.image, width: data.width * zoom, height: data.height * zoom });
+    zoomed.querySelector('figcaption').textContent = `${data.width}×${data.height}, zoomed ×${zoom}` +
+      (c.box[2] === data.width && c.box[3] === data.height ? ', pixel for pixel' : `, fitted from ${c.box[2]}×${c.box[3]}`);
+    Object.assign(game.querySelector('img'), { src: data.image, width: data.width * scale, height: data.height * scale });
+    game.querySelector('.floor').style.background = floorColor();
+    game.querySelector('figcaption').textContent = `in game (×${scale})`;
+  }, 250);
 }
 
 // ---------- Music tab: AI takes ----------

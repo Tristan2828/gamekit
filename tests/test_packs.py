@@ -188,7 +188,9 @@ class PackTests(unittest.TestCase):
         with wave.open(str(self.root / "assets" / "sfx" / "boom.wav"), "rb") as w:
             self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 44100))
             self.assertLess(w.getnframes(), 4500)  # 2000 samples at 22050 Hz -> ~4000, silence trimmed
-        self.assertIn("source: pack, status: draft, license: {pack: s}", out)
+        boom = manifest.load(self.root / "assets.yaml").assets[0]  # the manifest is updated for it
+        self.assertEqual((boom.source, boom.status, boom.license), ("pack", "draft", {"pack": "s"}))
+        self.assertEqual(manifest.validate(manifest.load(self.root / "assets.yaml"), check_files=False), [])
 
     def test_use_refuses_paths_outside_pack(self) -> None:
         (self.download / "a.png").write_bytes(b"")

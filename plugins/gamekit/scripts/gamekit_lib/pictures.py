@@ -37,12 +37,20 @@ slug = made.slug
 
 
 def record(path: Path, request: dict, answer: dict) -> dict:
-    """Writes the settings that made a picture beside it."""
+    """Writes the settings that made a picture beside it. A picture worked from pack art (a picture copied from a
+    pack, or one made from such a picture) lists those packs in `packs`, so their licenses can be checked."""
+    from_packs = sorted({name for ref in request.get("refs", []) for name in packs_of(read_meta(Path(ref)))})
     return made.record(path, {"prompt": request.get("prompt", ""), "seed": answer.get("seed"),
                               "width": answer.get("width"), "height": answer.get("height"),
                               "steps": request.get("steps"), "tile": bool(request.get("tile")),
                               "refs": [Path(r).name for r in request.get("refs", [])], "model": "FLUX.2 klein 4B",
-                              "for": request.get("for", ""), "frame": request.get("frame", "")})
+                              "for": request.get("for", ""), "frame": request.get("frame", "")}
+                       | ({"packs": from_packs} if from_packs else {}))
+
+
+def packs_of(meta: dict) -> list[str]:
+    """The packs a picture's art comes from: its own pack (copied from one), and the packs it was worked from."""
+    return ([str(meta["pack"])] if meta.get("pack") else []) + [str(p) for p in meta.get("packs") or []]
 
 
 def cutout_path(manifest: Manifest, name: str) -> Path:
@@ -251,6 +259,12 @@ def use_as_asset(manifest: Manifest, asset: Asset, name: str, background: bool =
                  snap: bool = True, outline: bool = True, frame: str = "") -> list[str]:
     """Makes a picture an image asset's file, or one of its frame files (`frame`, e.g. "ghoul_walk_1");
     returns check problems."""
+    check_frame(manifest, asset, frame)
+    return save_as_asset(manifest, asset, make_sprite(manifest, asset, name, background, snap, outline), frame)
+
+
+def check_frame(manifest: Manifest, asset: Asset, frame: str = "") -> str:
+    """The frame one image can become (`frame`, or the asset itself / its first frame); refuses sheet animations."""
     if asset.frames and sum(asset.frames.values()) > 1 and not manifest.frame_paths(asset):
         raise PictureError(f"{asset.id} is animated ({', '.join(f'{k} {v}' for k, v in asset.frames.items())}) and "
                            "kept as one sheet; a picture makes one frame. Ask Claude to draw the animation from it.")
@@ -258,7 +272,12 @@ def use_as_asset(manifest: Manifest, asset: Asset, name: str, background: bool =
     frame = frame or targets[0]
     if frame not in targets:
         raise PictureError(f"{asset.id} has no frame {frame!r}; there are: {', '.join(targets)}")
-    sprite = make_sprite(manifest, asset, name, background, snap, outline)
+    return frame
+
+
+def save_as_asset(manifest: Manifest, asset: Asset, sprite: Image.Image, frame: str = "") -> list[str]:
+    """Saves a finished sprite as the asset's file, or one of its frame files; returns check problems."""
+    frame = check_frame(manifest, asset, frame)
     paths = {path.stem: path for _, _, path in manifest.frame_paths(asset)}
     if paths:
         paths[frame].parent.mkdir(parents=True, exist_ok=True)

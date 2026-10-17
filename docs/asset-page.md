@@ -328,6 +328,49 @@ sprites:
   floors: {The Crypt: "#1C1A21", ...}      # floor colors to preview sprites on
 ```
 
+## Packs tab: downloaded asset packs
+
+Ready-made art you downloaded (itch.io, Kenney, OpenGameArt...), to browse, shortlist, use, or make new AI art from.
+
+**1. Put downloads in the game's `packs/` folder.** A `.zip`, `.rar`, `.7z` or a plain folder. They show under
+**New downloads**. Press **Import**: the pack is copied to `packs/<name>/files/`, with a `packs/<name>/pack.yaml`
+beside it. The download itself stays where it is. Folders whose names start with `_` are ignored (your own notes,
+previews...). `.rar` and `.7z` are opened with 7-Zip if it's installed, otherwise with Windows' own `tar`.
+
+**2. Record the license.** Click the pack's name under **Packs**. It lists the pack's license and readme files (click
+one to read it; PDFs open in the browser). The words in brackets are hints found in those files, not the answer. Fill in
+**License** (e.g. CC0, CC-BY 4.0) and **Credit** (who made it), then **Save license**. Or ask Claude: "record the
+license of the foozle pack". Until a pack has a license, you can look at it and star images, but nothing can be taken from it.
+The pill shows what it means: **CC0** (free, no credit needed), another license (check what it asks, usually a credit in
+`CREDITS.md`), or **license not set**.
+
+**3. Browse and shortlist.** Every image of every pack is on the right. Filter by pack or search by file name; **★**
+puts an image on the shortlist (saved in `pack.yaml`), and **Only the shortlist** shows just those.
+
+**4. Box a part of an image.** Click an image. Drag on it to draw a box (or type x, y, width, height). **Trim** shrinks
+the box to the visible pixels inside it. For sprite sheets, turn on **Grid** with the sheet's frame size: then a click
+picks one cell. Then:
+- **Use in game**: pick the sprite (and frame). A box the sprite's own size is used pixel for pixel; any other size is
+  fitted, keeping its shape. **Snap to palette** recolors it to your palette. The asset becomes `source: pack` with the
+  pack's license, so credits stay right.
+- **Next frame →**: for animations in a row. Moves the box one box along and picks the next frame; press **Use in game**
+  for each.
+- **Copy to Pictures**: the boxed part goes to your pictures (enlarged, on white), tagged **from pack**. There,
+  **Work from this** makes new AI pictures in its style, **Use as asset…** and **Touch up with Claude** work as for any
+  picture. Nothing goes into the game.
+
+AI pictures made from pack art are tagged **from pack art**. When one is used in the game, the message names any pack
+whose license isn't CC0, so you can check that it allows this and credit it if it asks.
+
+**Git:** commit each `packs/<name>/pack.yaml` (the licenses), ignore the rest. In `.gitignore`:
+
+```
+packs/*
+!packs/*/
+packs/*/*
+!packs/*/pack.yaml
+```
+
 ## Voices tab: AI voice-overs
 
 Spoken lines (Qwen3-TTS), on your graphics card.

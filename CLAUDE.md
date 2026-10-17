@@ -35,7 +35,8 @@ prefer simple, readable solutions. First user: the Godot game `Tristan2828/GameT
 User guide: `docs/asset-page.md`. Logic: `pictures.py` (library, shrinking), `touchup.py` (drafts), `ui.py` routes.
 - `pictures/` in the game holds every AI picture: `<name>.png` + `<name>.json` meta. Meta keys: `prompt`, `seed`,
   `width`/`height`, `for` (asset id), `frame`, `refs` (worked from), `kept` (starred), `tile`, `cutout_of`,
-  `sprite_of` (a game-sized **sprite tile**), `touchup` (a **touch-up draft**), `copy_of`. Remove moves files
+  `sprite_of` (a game-sized **sprite tile**), `touchup` (a **touch-up draft**), `copy_of`, `pack`/`pack_file`/`box`
+  (copied from a pack: Use makes the asset `source: pack`), `packs` (AI art worked from pack art). Remove moves files
   (incl. a draft's `.yaml`) to `pictures/_removed`; nothing is deleted.
 - Only an explicit **Use** writes into the game (`picture-use`, `picture-frames`, the page's Use buttons). Touch-up
   never does: `touchup` makes `pictures/<stem>-touchup-<w>x<h>.png` + `.yaml` text rows; Claude edits the yaml and
@@ -46,6 +47,10 @@ User guide: `docs/asset-page.md`. Logic: `pictures.py` (library, shrinking), `to
   the frames are too small for AI, so "Animate with Claude" makes drafts for every frame (`--every-frame`) and the
   user asks Claude to "animate the <id> drafts" (see the art-draw skill).
 - "Work from this" = FLUX reference images: the new picture keeps the creature's look; the words say only what changes.
+- Packs tab (`packs.py`): downloads sit in the game's `packs/` (zip/rar/7z/folder; `_` names ignored), Import makes
+  `packs/<name>/files/` + `pack.yaml` (license, `download`, `starred`). Nothing leaves an unlicensed pack. A boxed part
+  is used directly (`to_sprite`: same size pixel for pixel, else fitted using the whole box) or copied to `pictures/`
+  enlarged on white (`to_picture`; the picture engine drops transparency to black).
 
 ## Working with the owner
 - They test on the page and give UI feedback in batches; explain choices briefly (e.g. why two similar buttons exist).

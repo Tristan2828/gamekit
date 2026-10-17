@@ -312,12 +312,18 @@ def set_status(path: str | Path, asset_id: str, status: str) -> None:
     set_fields(path, asset_id, {"status": status})
 
 
+PACK_LICENSE = re.compile(r"\{pack: [a-z0-9][a-z0-9_-]*\}")
+VALUE = r"(\{[^{}]*\}|[\w-]+)"  # a field's current value on its line: a word or a one-line {...}
+
+
 def set_fields(path: str | Path, asset_id: str, values: dict[str, str]) -> None:
     """Changes simple fields (status, source...) of one asset in assets.yaml in place, keeping every
     comment and the layout. Works for one-line entries (`- {id: hero, status: todo, ...}`) and block
-    entries (`- id: hero` with the fields on the lines below). Missing fields are added after the id."""
+    entries (`- id: hero` with the fields on the lines below). Missing fields are added after the id.
+    Besides simple words, `license` can be set to `{pack: <name>}` (an asset taken from a pack)."""
     for key, value in values.items():
-        if not re.fullmatch(r"[a-z_]+", key) or not re.fullmatch(r"[a-z0-9_]+", str(value)):
+        simple = re.fullmatch(r"[a-z0-9_]+", str(value)) or (key == "license" and PACK_LICENSE.fullmatch(str(value)))
+        if not re.fullmatch(r"[a-z_]+", key) or not simple:
             raise ManifestError(f"can't write {key}: {value!r} (only simple words)")
     path = Path(path)
     text = path.read_bytes().decode("utf-8")  # bytes, so the file keeps its own line endings
@@ -329,8 +335,8 @@ def set_fields(path: str | Path, asset_id: str, values: dict[str, str]) -> None:
     for i, line in enumerate(lines):
         if flow.match(line):
             for key, value in values.items():
-                if re.search(rf"\b{key}:\s*\w+", line):
-                    line = re.sub(rf"\b{key}:\s*\w+", f"{key}: {value}", line, count=1)
+                if re.search(rf"\b{key}:\s*{VALUE}", line):
+                    line = re.sub(rf"\b{key}:\s*{VALUE}", lambda _: f"{key}: {value}", line, count=1)
                 else:
                     line = re.sub("(" + id_part + ")", rf"\1, {key}: {value}", line, count=1)
             lines[i] = line
@@ -345,7 +351,15 @@ def set_fields(path: str | Path, asset_id: str, values: dict[str, str]) -> None:
             for key, value in values.items():
                 for j in range(i + 1, end):
                     if re.match(rf"^\s+{key}:", lines[j]):
-                        lines[j] = re.sub(rf"({key}:\s*)\w+", rf"\g<1>{value}", lines[j], count=1)
+                        field_indent = len(lines[j]) - len(lines[j].lstrip())
+                        if re.match(rf"^\s+{key}:\s*(#.*)?$", lines[j]):  # a nested block (license:, then name: ...)
+                            lines[j] = " " * field_indent + f"{key}: {value}" + newline
+                            while j + 1 < end and lines[j + 1].strip() and \
+                                    len(lines[j + 1]) - len(lines[j + 1].lstrip()) > field_indent:
+                                del lines[j + 1]
+                                end -= 1
+                        else:
+                            lines[j] = re.sub(rf"({key}:\s*){VALUE}", lambda m: m.group(1) + value, lines[j], count=1)
                         break
                 else:
                     lines.insert(i + 1, " " * (indent + 2) + f"{key}: {value}" + newline)
@@ -355,10 +369,17 @@ def set_fields(path: str | Path, asset_id: str, values: dict[str, str]) -> None:
         raise ManifestError(f"{asset_id!r} is not in {path.name}")
     changed = "".join(lines)
     check = {a.id: a for a in _parse(changed, path)}
-    if asset_id not in check or any(str(getattr(check[asset_id], k, None)) != str(v) for k, v in values.items()):
+    if asset_id not in check or any(_written(check[asset_id], k) != str(v) for k, v in values.items()):
         # never write a file we can't read back the way we meant
         raise ManifestError(f"couldn't change {asset_id} safely; edit {path.name} by hand")
     path.write_bytes(changed.encode("utf-8"))
+
+
+def _written(asset: Asset, key: str) -> str:
+    """A field as set_fields writes it, to check that the file reads back the way it was meant."""
+    if key == "license":
+        return "{pack: " + str(asset.license.get("pack")) + "}" if set(asset.license) == {"pack"} else str(asset.license)
+    return str(getattr(asset, key, None))
 
 
 def _parse(text: str, path: Path) -> list[Asset]:

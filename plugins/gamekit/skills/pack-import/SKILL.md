@@ -1,6 +1,6 @@
 ---
 name: pack-import
-description: Import a downloaded ready-made asset pack (itch.io, Kenney, OpenGameArt, CraftPix... as a .zip or folder), record its license, and turn files from it into the game's assets, including cropping sprites or animation frames out of sprite sheets, resizing and recoloring to the game's palette. Use when the user has downloaded or wants to use an art or sound pack, or asks to replace an asset with one from a pack.
+description: Import a downloaded ready-made asset pack (itch.io, Kenney, OpenGameArt, CraftPix... as a .zip, .rar, .7z or folder, often dropped in the game's packs/ folder), record its license, and turn files from it into the game's assets, including cropping sprites or animation frames out of sprite sheets, resizing and recoloring to the game's palette. Use when the user has downloaded or wants to use an art or sound pack, or asks to replace an asset with one from a pack.
 ---
 
 # Import an asset pack
@@ -9,16 +9,30 @@ CLI (run from the game's root, the folder with `assets.yaml`; `python3` if `pyth
 needs PyYAML and Pillow from `${CLAUDE_PLUGIN_ROOT}/requirements.txt`, ask before installing):
 
 ```
-python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" pack add <zip-or-folder> <name> [--url <download page>]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" pack add <zip-rar-7z-or-folder> <name> [--url <download page>]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" pack info <name>
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" pack license <name> --license "<name>" --author "<credit>" --license-url <link>
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" pack list [<name>] [--filter <text>]
 python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" pack use <name> <file> <asset-id> [options]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/gamekit.py" pack picture <name> <file> [--crop x,y,w,h] [--for <asset-id>]
 ```
 
 A pack is copied to `packs/<name>/files/` exactly as downloaded, with `packs/<name>/pack.yaml`
-holding its license. Assets taken from it say `license: {pack: <name>}` in `assets.yaml`, so
-`validate` and `credits` read the license from the pack.
+holding its license, the download it came from and the user's shortlist (`starred`). Assets taken
+from it say `license: {pack: <name>}` in `assets.yaml`, so `validate` and `credits` read the
+license from the pack. `pack use` writes `source`, `license` and `status: draft` into `assets.yaml` itself.
+
+The user usually drops downloads into the game's `packs/` folder and works on the asset page's
+**Packs** tab (import, license form, browse, star, box a part, Use in game, Copy to Pictures).
+`pack list` with no name also lists downloads in `packs/` that aren't imported yet, with a
+suggested name. `.rar` / `.7z` need 7-Zip or Windows' own `tar.exe` (found automatically). Folders
+in `packs/` starting with `_` are the user's own and left alone. Suggest committing only
+`packs/*/pack.yaml` (see the `.gitignore` lines in `docs/asset-page.md`).
+
+`pack picture` copies (part of) an image into `pictures/`, enlarged on white, tagged with its pack:
+the user can then make AI art in its style there (Work from this), or you can touch it up. AI pictures
+made from it list the pack in their meta (`packs`); when the pack isn't CC0, remind the user to check
+its license allows derived art and credit it if asked.
 
 If `assets.yaml` sets `frame_files: true`, animated sprites are written as one PNG per frame (`<name>.png` = idle frame 0, `<name>_1.png`, `<name>_walk_1.png`, `<name>_attack.png`...) instead of a sheet + `.json`; `check` and `preview` handle both.
 
@@ -62,8 +76,8 @@ usually a multiple of the frame size. Pixels are made fully opaque or fully tran
 Sounds are copied as-is when the file type already matches (`.wav` for sfx, `.ogg` for music);
 other types need converting first.
 
-`use` prints the check results (size, frames, palette). Then update the asset in `assets.yaml`
-yourself, keeping the file's comments and layout:
+`use` prints the check results (size, frames, palette) and updates the asset in `assets.yaml`
+(if it can't do that safely it prints what to set by hand, keeping the file's comments and layout):
 
 ```yaml
 source: pack

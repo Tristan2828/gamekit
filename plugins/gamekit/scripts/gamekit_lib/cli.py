@@ -48,8 +48,8 @@ def main(argv: list[str] | None = None) -> int:
 
     pack = commands.add_parser("pack", help="import ready-made asset packs and take assets from them")
     pack_commands = pack.add_subparsers(dest="pack_command", required=True)
-    pack_add = pack_commands.add_parser("add", help="copy a downloaded .zip or folder into packs/<name>/")
-    pack_add.add_argument("source", help="path to the .zip or folder")
+    pack_add = pack_commands.add_parser("add", help="copy a downloaded .zip, .rar, .7z or folder into packs/<name>/")
+    pack_add.add_argument("source", help="path to the .zip, .rar, .7z or folder")
     pack_add.add_argument("name", help="short pack name, e.g. kenney_tiny_dungeon")
     pack_add.add_argument("--url", default="", help="where it was downloaded from")
     _license_args(pack_add)
@@ -61,6 +61,12 @@ def main(argv: list[str] | None = None) -> int:
     pack_list.add_argument("--filter", default="", help="only paths containing this text")
     pack_info = pack_commands.add_parser("info", help="a pack's license, license files and hints")
     pack_info.add_argument("name")
+    pack_picture = pack_commands.add_parser("picture", help="copy (part of) a pack image into pictures/, enlarged, "
+                                                            "to work from with AI or touch up")
+    pack_picture.add_argument("name", help="pack name")
+    pack_picture.add_argument("file", help="image inside the pack (as `pack list` shows it)")
+    pack_picture.add_argument("--crop", help="x,y,w,h: only this part of the image")
+    pack_picture.add_argument("--for", dest="for_id", default="", help="the asset id it is for")
     pack_use = pack_commands.add_parser("use", help="make an asset from a file in a pack")
     pack_use.add_argument("name", help="pack name")
     pack_use.add_argument("file", help="file inside the pack (as `pack list` shows it)")
@@ -382,7 +388,20 @@ def _license_args(parser: argparse.ArgumentParser) -> None:
 def _pack(args: argparse.Namespace) -> int:
     root = Path(args.manifest).resolve().parent
     return {"add": _pack_add, "license": _pack_license, "list": _pack_list,
-            "info": _pack_info, "use": _pack_use}[args.pack_command](args, root)
+            "info": _pack_info, "use": _pack_use, "picture": _pack_picture}[args.pack_command](args, root)
+
+
+def _pack_picture(args: argparse.Namespace, root: Path) -> int:
+    loaded = manifest.load(args.manifest)
+    pack = packs.load(root, args.name)
+    if not pack.has_license():
+        raise packs.PackError(f"pack {pack.name} has no license recorded yet; run `gamekit pack info {pack.name}`")
+    if args.for_id and args.for_id not in {a.id for a in loaded.assets}:
+        raise packs.PackError(f"{args.for_id!r} is not in {args.manifest}")
+    box = list(packs.parse_box(args.crop)) if args.crop else None
+    path = packs.to_picture(loaded, pack, args.file, box, args.for_id)
+    print(f"copied to {path.relative_to(root).as_posix()} (see the Pictures tab)")
+    return 0
 
 
 def _pack_add(args: argparse.Namespace, root: Path) -> int:
@@ -430,6 +449,9 @@ def _pack_list(args: argparse.Namespace, root: Path) -> int:
             print(f"{pack.name}: {len(packs.list_files(pack))} files, {lic}")
         if not found:
             print("no packs yet: import one with `gamekit pack add <zip> <name>`")
+        for download in packs.downloads(root):
+            print(f"not imported yet: packs/{download['name']} ({download['kind']}); "
+                  f"`gamekit pack add \"packs/{download['name']}\" {download['suggested']}`")
         return 0
     pack = packs.load(root, args.name)
     shown = 0
@@ -515,9 +537,14 @@ def _pack_use(args: argparse.Namespace, root: Path) -> int:
     else:
         raise packs.PackError(f"{asset.id}: don't know how to make a {out_suffix} file from a pack")
 
-    if asset.source != "pack" or asset.license.get("pack") != pack.name or asset.status == "todo":
-        print(f"now update {asset.id} in {Path(args.manifest).name}:")
-        print(f"  source: pack, status: draft, license: {{pack: {pack.name}}}")
+    if asset.source != "pack" or asset.license != {"pack": pack.name} or asset.status == "todo":
+        changes = {"source": "pack", "license": "{pack: " + pack.name + "}"} | ({"status": "draft"} if asset.status == "todo" else {})
+        try:
+            manifest.set_fields(args.manifest, asset.id, changes)
+            print(f"{Path(args.manifest).name}: {asset.id} is now " + ", ".join(f"{k}: {v}" for k, v in changes.items()))
+        except manifest.ManifestError:
+            print(f"now update {asset.id} in {Path(args.manifest).name}:")
+            print(f"  source: pack, status: draft, license: {{pack: {pack.name}}}")
     return 0
 
 
