@@ -2,7 +2,9 @@
 
 Gamekit is a Claude Code plugin (plus plain Python CLI) for a game's art and audio pipeline. The
 owner is new to game dev and has Claude write most of the code: explain new concepts briefly and
-prefer simple, readable solutions. First user: the Godot game `Tristan2828/GameTest` (Windows).
+prefer simple, readable solutions. Users (Godot games, Windows): Medieval Survival
+(`Tristan2828/medieval-survival`, formerly GameTest; local folder still `C:\Repos\GameTest`) and
+`C:\Repos\vertical-scroller` (the Packs tab was built for its downloads).
 
 ## Layout
 - `.claude-plugin/marketplace.json`: makes this repo installable (`/plugin marketplace add Tristan2828/gamekit`).
