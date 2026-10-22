@@ -62,6 +62,20 @@ Loudness comes from `audio.music_lufs` in `assets.yaml` unless `--loudness` is g
 
 Rendering keeps the game's own mix level; add `--loudness` only to match other music.
 
+### Making a short code-made loop longer
+
+A 10-30 s loop gets tiring fast; game music briefs usually ask for 60-120 s with an A and a B section.
+`music info <id>` shows the length. To lengthen one, edit the game's text score (not the OGG):
+
+1. Read the track's score and the brief. Keep its key, tempo, instruments and mood.
+2. Keep the existing phrase as section A. Write a B section that answers it: the same chords in another
+   order or a step up, a melody variation, or a breakdown (drums and bass only), 8-16 bars.
+3. Arrange A A B A (or A B A C) so the total lands in 60-120 s, and make the last bar lead back into
+   the first so the loop seam stays smooth.
+4. Run the game's own tests if it has any, then `music render <id>` (needs Godot on the user's PC) and
+   check the numbers: same loudness as the other tracks, no silence at the start or end, no loop jump.
+   Ask the user to listen in game before marking it done.
+
 ## Downloaded, commissioned or AI music (`source: library` / `commission`)
 
 1. Check the license first and record it on the asset (`license: {name, author, url}`) or import

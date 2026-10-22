@@ -314,6 +314,11 @@ def _status(args: argparse.Namespace) -> int:
         finished = sum(totals[s] for s in manifest.FINISHED)
         kept = f" ({totals['keep']} kept as the game makes them)" if totals["keep"] else ""
         print(f"{round(100 * finished / count)}% done{kept}")
+    has_file = [a.id for a in loaded.assets if a.status == "todo" and a.file and loaded.asset_path(a).exists()]
+    if has_file:  # a file is in the game already: usually draft (not final yet)
+        shown = ", ".join(has_file[:5]) + (f" and {len(has_file) - 5} more" if len(has_file) > 5 else "")
+        print(f"note: {len(has_file)} todo asset{'s have' if len(has_file) != 1 else ' has'} a file in the game "
+              f"already ({shown}): draft?")
     if args.todo:
         unfinished = [a for a in loaded.assets if a.status not in manifest.FINISHED]
         if unfinished:

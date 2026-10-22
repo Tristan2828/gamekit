@@ -65,6 +65,14 @@ class HardeningTests(unittest.TestCase):
         pictures.record_cutout(folder / "bat-1-cutout.png", "bat-1.png", {"prompt": "a bat"})
         self.assertEqual(pictures.original_of(self.loaded, "bat-1-cutout.png"), "bat-1-cutout.png")
 
+    def test_status_notes_todo_assets_with_a_file(self) -> None:
+        (self.root / "assets" / "art").mkdir(parents=True)
+        Image.new("RGBA", (4, 4)).save(self.root / "assets" / "art" / "bat.png")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.main(["-m", str(self.root / "assets.yaml"), "status"])
+        self.assertIn("1 todo asset has a file in the game already (bat)", out.getvalue())
+
     def test_touchup_with_a_big_unnamed_palette(self) -> None:
         entries = [palette.Entry((i * 7, 255 - i * 7, i * 3)) for i in range(32)]  # Lospec style: no names
         image = Image.new("RGBA", (32, 1))
