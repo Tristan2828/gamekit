@@ -8,7 +8,7 @@
 <!-- gamekit's asset page. Served by `gamekit ui` (scripts/gamekit_lib/ui.py); every action is a POST to /api/... -->
 <style>
   :root {
-    --bg: #101413; --panel: #171d1b; --raised: #1f2724; --line: #2f3a36;
+    --bg: #101413; --panel: #171d1b; --raised: #1f2724; --line: #2f3a36; --field: #4a5852;
     --text: #e6eee9; --dim: #93a39c; --accent: #4fc39a; --accent-dim: #2b7a5e; --good: #8fca6a; --warn: #e0b04f; --bad: #e0705f;
   }
   * { box-sizing: border-box; }
@@ -32,14 +32,19 @@
   nav button { padding: 7px 22px; border-radius: 20px; color: var(--dim); }
   nav button.on { background: var(--accent); border-color: var(--accent); color: #07140f; font-weight: 600; }
   main { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 20px; padding: 12px 24px 40px; align-items: start; }
+  /* wide screens: the left panel (filters, forms) stays in view while the list on the right scrolls */
+  @media (min-width: 1000px) { main > section:first-child { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow-y: auto; } }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px 40px; } header { padding: 16px 16px 4px; } .game { margin-left: 0; } }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
   h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
   h2.gap { margin-top: 24px; }
   label { display: block; margin: 14px 0 5px; font-size: 13px; color: var(--dim); }
   select, input[type=text], input[type=number] {
-    width: 100%; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
-  select:focus, input:focus, button:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 0; }
+    width: 100%; background: var(--raised); color: var(--text); border: 1px solid var(--field); border-radius: 6px; padding: 8px 10px; font: inherit; }
+  select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent-dim); outline-offset: 0; }
+  /* where the keyboard is: a clear ring on anything that can be pressed */
+  button:focus-visible, a:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .seg button:focus-visible { outline-offset: -2px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
   .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; color: var(--text); }
@@ -70,12 +75,20 @@
   th:first-child, td:first-child { text-align: left; }
   th { color: var(--dim); font-weight: 600; }
   .problems { margin: 8px 0 0; padding-left: 18px; color: var(--warn); font-size: 13px; }
+  a[data-goasset] { color: inherit; font-weight: 600; text-decoration: underline dotted; }
   .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--raised); }
   .card.kept { border-color: var(--accent-dim); }
   .card h3 { margin: 0; font-size: 15.5px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .card .meta { color: var(--dim); font-size: 12.5px; margin: 1px 0 6px; }
   .card .notes { color: var(--dim); font-size: 13px; margin: 6px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
   .card .notes.open { display: block; }
+  .card .foot { display: flex; flex-wrap: wrap; gap: 0 10px; align-items: center; }
+  .card .foot .work { margin-top: 6px; font-size: 12.5px; padding: 2px 12px; border-radius: 20px; color: var(--dim); }
+  .card .foot .work:hover { color: var(--text); }
+  /* "Use for a track…" / "Use as asset…" under a take: shut until its button is pressed */
+  .card .takeuse { display: none; margin-top: 10px; padding-top: 4px; border-top: 1px solid var(--line); }
+  .card .takeuse.open { display: block; }
+  .buttons button.on { border-color: var(--accent); background: #1b3329; }
   .card audio { width: 100%; height: 34px; margin-top: 4px; }
   .assetRow { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: start; grid-auto-flow: dense; }
   .thumb { width: 72px; height: 72px; border-radius: 6px; background: #3a4541; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -94,7 +107,7 @@
   .shape { display: flex; align-items: flex-end; gap: 2px; height: 28px; margin: 6px 0 2px; }
   .shape div { flex: 1; background: var(--accent-dim); border-radius: 1px 1px 0 0; min-height: 1px; }
   .numbers { font-size: 12.5px; color: var(--dim); }
-  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 14px; text-align: center; color: var(--dim); cursor: pointer; font-size: 13.5px; margin-top: 6px; }
+  .drop { border: 2px dashed var(--field); border-radius: 8px; padding: 14px; text-align: center; color: var(--dim); cursor: pointer; font-size: 13.5px; margin-top: 6px; }
   .drop.over, .drop:hover { border-color: var(--accent-dim); }
   .drop.has { border-style: solid; color: var(--text); }
   .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
@@ -114,7 +127,7 @@
   .empty { color: var(--dim); padding: 30px 0; text-align: center; }
   .tab { display: none; }
   body[data-tab=assets] .tab.assets, body[data-tab=sounds] .tab.sounds, body[data-tab=music] .tab.music, body[data-tab=art] .tab.art, body[data-tab=pictures] .tab.pictures, body[data-tab=voices] .tab.voices, body[data-tab=models] .tab.models, body[data-tab=packs] .tab.packs { display: block; }
-  textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
+  textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--raised); color: var(--text); border: 1px solid var(--field); border-radius: 6px; padding: 8px 10px; font: inherit; }
   /* Pictures tab: a toolbar (filter, view), then a grid of tiles. A tile whose "Use as asset" is open spans the row. */
   .picbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: -4px 0 12px; font-size: 12.5px; color: var(--dim); }
   .seg.pick { margin: 0; }
@@ -164,8 +177,9 @@
   .pic.using { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 18px; border-color: var(--accent-dim); }
   .pic.using .use { display: block; }
   @media (max-width: 760px) { .pic.using { grid-template-columns: 1fr; } }
-  .use .usehead { display: flex; justify-content: space-between; align-items: center; }
-  .use .usehead b { font-size: 15px; }
+  .usehead { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .usehead b { font-size: 15px; overflow-wrap: anywhere; }
+  .usehead .hint { margin: 0; white-space: nowrap; }
   .use label { margin: 10px 0 4px; }
   .use select { padding: 6px 8px; font-size: 13.5px; }
   .use .opts { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -200,6 +214,7 @@
   .use .preview .floor { padding: 16px 22px; border-radius: 6px; margin-bottom: 4px; }
   #bigPic { display: none; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.85); align-items: center; justify-content: center; cursor: zoom-out; }
   #bigPic img { max-width: 94vw; max-height: 94vh; }
+  #bigPic:focus { outline: none; }
   .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
   .refs span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border: 1px solid var(--accent-dim); border-radius: 8px; padding: 3px 4px 3px 3px; color: var(--text); }
   .refs img { width: 40px; height: 40px; object-fit: contain; border-radius: 4px; background: #0b0e0d; }
@@ -368,6 +383,7 @@
     <div class="tab art">
       <h2>Show</h2>
       <div class="row"><div><label for="aKind">Kind</label><select id="aKind"></select></div><div><label for="aStatus">Status</label><select id="aStatus"></select></div></div>
+      <label for="aText">Search</label><input type="text" id="aText" placeholder="id or notes, e.g. bat">
       <label for="aScale">Zoom <span id="aScaleText"></span></label><input type="range" id="aScale" min="1" max="8" value="4" style="width:100%;accent-color:var(--accent)">
       <label class="check"><input type="checkbox" id="aMade"> Only images with art (files or code)</label>
       <label class="check"><input type="checkbox" id="aFiles"> Only finished art files (hide code art)</label>
@@ -478,7 +494,7 @@
     <div class="tab voices"><h2 id="voiceTitle">Readings</h2><div id="voiceList"></div></div>
   </section>
 </main>
-<div id="bigPic"><img alt=""></div>
+<div id="bigPic" role="dialog" aria-label="The picture, full size (click or Escape to close)" tabindex="-1"><img alt=""></div>
 <input type="file" id="filePick" accept="audio/*,.wav,.mp3,.ogg,.flac" style="display:none">
 
 <script>
@@ -491,31 +507,59 @@ let preset = 'hit';
 const uploads = { sfx: null, sfxMatch: null, music: null };
 
 // ---------- talking to the server ----------
+const NO_ANSWER = 'no answer from gamekit (is its window still open?)';
+// lists and previews the page asks for by itself; anything else is an action, and its button waits for the answer
+const LOOKS = ['/api/pictures', '/api/packs', '/api/packs/images', '/api/takes', '/api/musictakes', '/api/sfx/takes', '/api/info',
+  '/api/job', '/api/pictures/preview', '/api/pictures/animation', '/api/packs/preview'];
+let pressed = null;  // the button being clicked right now (api() calls start in the same moment)
+document.addEventListener('click', e => { pressed = e.target.closest('button'); setTimeout(() => { pressed = null; }); }, true);
+
 async function api(path, body = {}, quiet = false) {
-  if (!quiet) showStatus('Working…', true);
-  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gamekit': '1' }, body: JSON.stringify(body) });
-  const data = await res.json().catch(() => ({ error: 'no answer from gamekit (is its window still open?)' }));
-  if (data.error === 'REPLACE?') {
-    if (!confirm('This asset already has a file. Replace it?')) { hideStatus(); return null; }
-    return api(path, { ...body, force: true }, quiet);
-  }
-  if (!res.ok || data.error) { showStatus(data.error || res.statusText, false, true); return null; }
-  if (!quiet) showResult(data);
-  return data;
+  const button = LOOKS.includes(path) ? null : pressed;
+  if (button) button.disabled = true;  // pressed twice quickly: sent once
+  try {
+    if (!quiet) showStatus('Working…', true);
+    let res;
+    try {
+      res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gamekit': '1' }, body: JSON.stringify(body) });
+    } catch { showStatus(NO_ANSWER, false, true); return null; }
+    const data = await res.json().catch(() => ({ error: NO_ANSWER }));
+    if (data.error === 'REPLACE?') {
+      if (!confirm(replaceQuestion(body))) { hideStatus(); return null; }
+      return await api(path, { ...body, force: true }, quiet);
+    }
+    if (!res.ok || data.error) { showStatus(data.error || res.statusText, false, true); return null; }
+    if (!quiet) showResult(data);
+    return data;
+  } finally { if (button) button.disabled = false; }
+}
+
+// "Replace …?" names what the game loses: the asset and its file (or frames), and what replaces it
+function replaceQuestion(body) {
+  const a = S && S.assets.find(x => x.id === body.id);
+  if (!a) return 'This asset already has a file. Replace it?';
+  const dir = a.file.includes('/') ? a.file.slice(0, a.file.lastIndexOf('/') + 1) : '';
+  const frames = body.frames ? Object.keys(body.frames) : body.frame && body.frame !== a.id ? [body.frame] : [];
+  const files = frames.length ? frames.map(f => `${dir}${f}.png`).join(', ') : a.file;
+  const by = body.name || (body.pack ? `${body.pack}: ${body.file}` : '') || (body.upload ? 'the file you dropped' : '');
+  return `${a.id} already has ${frames.length > 1 ? 'frames' : 'a file'} in your game (${files}).\n\nReplace ${frames.length > 1 ? 'them' : 'it'}${by ? ' with ' + by : ''}?`;
 }
 
 async function upload(file) {
   showStatus('Sending ' + file.name + '…', true);
-  const res = await fetch('/api/upload?name=' + encodeURIComponent(file.name), { method: 'POST', headers: { 'X-Gamekit': '1' }, body: file });
-  const data = await res.json().catch(() => ({}));
+  let data;
+  try {
+    const res = await fetch('/api/upload?name=' + encodeURIComponent(file.name), { method: 'POST', headers: { 'X-Gamekit': '1' }, body: file });
+    data = await res.json().catch(() => ({}));
+  } catch { showStatus(NO_ANSWER, false, true); return null; }
   if (!data.upload) { showStatus(data.error || 'upload failed', false, true); return null; }
   hideStatus();
   return data.upload;
 }
 
 async function load() {
-  const res = await fetch('/api/state');
-  const data = await res.json();
+  let data;
+  try { data = await (await fetch('/api/state')).json(); } catch { showStatus(NO_ANSWER, false, true); return; }
   if (data.error) { showStatus(data.error, false, true); return; }
   S = data;
   $('gameName').textContent = S.game;
@@ -534,7 +578,18 @@ function showStatus(text, busy = false, error = false, list = []) {
   $('statusText').textContent = text;
   $('statusBar').style.display = busy ? 'block' : 'none';
   $('statusBar').classList.toggle('busy', busy);
-  $('statusList').innerHTML = list.map(p => '<li>' + esc(p) + '</li>').join('');
+  $('statusList').innerHTML = list.map(p => '<li>' + problemLine(p) + '</li>').join('');
+}
+// a problem that starts with an asset id ("bat: wrong size", "assets[5] (bat): ...") links to it on the Assets tab
+function problemLine(p) {
+  const m = /^(assets\[\d+\] \()?([\w.-]+)(\)?:[\s\S]*)$/.exec(String(p));
+  return m && S && S.assets.some(a => a.id === m[2]) ? `${esc(m[1] || '')}<a href="#" data-goasset="${esc(m[2])}" title="Show ${esc(m[2])} on the Assets tab">${esc(m[2])}</a>${esc(m[3])}` : esc(p);
+}
+function showAsset(id) {
+  for (const f of ['fKind', 'fStatus']) { $(f).value = ''; store.set(f, ''); }
+  $('fText').value = id;
+  setTab('assets');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function hideStatus() { $('status').style.display = 'none'; }
 function showResult(data) {
@@ -547,8 +602,12 @@ $('statusClose').onclick = hideStatus;
 
 // ---------- tabs ----------
 function setTab(tab) {
+  if (document.body.dataset.tab !== tab && !lastJob) hideStatus();  // an old message belongs to the old tab (a running job stays)
   document.body.dataset.tab = tab;
-  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('nav button').forEach(b => {
+    b.classList.toggle('on', b.dataset.tab === tab);
+    if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   store.set('tab', tab);
   if (S) renderAll();
 }
@@ -566,6 +625,10 @@ function renderAll() {
 }
 
 // ---------- shared bits ----------
+// Lists ask the server when they're shown; switching quickly sends several asks, and only the newest answer is drawn.
+const turns = {};
+const newTurn = key => (turns[key] = (turns[key] || 0) + 1);
+const stale = (key, turn) => turns[key] !== turn;
 const option = (value, text, selected) => `<option value="${esc(value)}"${selected ? ' selected' : ''}>${esc(text)}</option>`;
 function fillSelect(el, items, keep) {
   const was = el.value || keep;
@@ -592,14 +655,41 @@ const sizeText = a => Array.isArray(a.size) ? a.size.join('×') : '';
 const codePill = a => a.from_code ? ' <span class="pill code" title="No art file yet: this is how the game draws it from its code">from code</span>' : '';
 const framesText = a => Object.entries(a.frames || {}).map(([n, c]) => `${n} ${c}`).join(', ');
 
+// a button that is one of a set (status, Show, View): on, for the eye and for screen readers
+function setOn(b, on) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+const statusPill = a => `<span class="pill ${a.status}" data-pill="${esc(a.id)}">${a.status}</span>`;
+const notesBox = text => text ? `<div class="notes" tabindex="0" role="button" aria-expanded="false" title="Show all of it">${esc(text)}</div>` : '';
 function statusButtons(a) {
-  return `<div class="seg">${S.statuses.map(s => `<button class="${s}${a.status === s ? ' on' : ''}" data-status="${s}" data-id="${esc(a.id)}" title="${esc(STATUS_TIPS[s] || '')}">${s}</button>`).join('')}</div>`;
+  return `<div class="seg">${S.statuses.map(s => `<button class="${s}${a.status === s ? ' on' : ''}" aria-pressed="${a.status === s}" data-status="${s}" data-id="${esc(a.id)}" title="${esc(STATUS_TIPS[s] || '')}">${s}</button>`).join('')}</div>`;
 }
 document.addEventListener('click', async e => {
-  const b = e.target.closest('[data-status]');
-  if (b && !b.classList.contains('on')) { if (await api('/api/status', { id: b.dataset.id, status: b.dataset.status }, true)) load(); }
+  const g = e.target.closest('[data-goasset]');
+  if (g) { e.preventDefault(); showAsset(g.dataset.goasset); return; }
   const n = e.target.closest('.notes');
-  if (n) n.classList.toggle('open');
+  if (n) n.setAttribute('aria-expanded', n.classList.toggle('open'));
+  const b = e.target.closest('[data-status]');
+  if (b && !b.classList.contains('on') && await api('/api/status', { id: b.dataset.id, status: b.dataset.status }, true)) setStatus(b.dataset.id, b.dataset.status);
+});
+// a status changed: changed on the page too, without reading everything again (the thumbnails stay as they are)
+function setStatus(id, status) {
+  const a = S.assets.find(x => x.id === id);
+  if (!a) { load(); return; }
+  if (a.status in S.counts) S.counts[a.status]--;
+  S.counts[status] = (S.counts[status] || 0) + 1;
+  a.status = status;
+  document.querySelectorAll('[data-status]').forEach(x => { if (x.dataset.id === id) setOn(x, x.dataset.status === status); });
+  document.querySelectorAll('[data-pill]').forEach(p => { if (p.dataset.pill === id) { p.className = 'pill ' + status; p.textContent = status; } });
+  fillFilters();  // the pickers show each asset's status too
+  if (document.body.dataset.tab === 'assets') renderProgress();
+}
+// keyboard: Enter or Space presses things that act as buttons; Escape closes the big picture
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('bigPic').style.display === 'flex') { closeBigPic(); return; }
+  const el = e.target;
+  if ((e.key === 'Enter' || e.key === ' ') && el.getAttribute && el.getAttribute('role') === 'button' && el.tagName !== 'BUTTON') {
+    e.preventDefault();
+    el.click();
+  }
 });
 
 function shape(values) {
@@ -610,7 +700,7 @@ function soundNumbers(i) {
 }
 
 // ---------- Assets tab ----------
-function renderAssets() {
+function renderProgress() {
   const c = S.counts, total = S.statuses.reduce((n, s) => n + (c[s] || 0), 0);
   const pct = total ? Math.round(100 * (c.done + (c.keep || 0)) / total) : 0;
   $('percent').textContent = pct + '% done';
@@ -620,8 +710,37 @@ function renderAssets() {
   for (const a of S.assets) { const k = kinds[a.kind] ??= Object.fromEntries(S.statuses.map(s => [s, 0])); if (a.status in k) k[a.status]++; }
   $('kindTable').innerHTML = '<tr><th>kind</th>' + S.statuses.map(s => `<th>${s}</th>`).join('') + '</tr>' +
     Object.entries(kinds).map(([k, v]) => `<tr><td>${esc(k)}</td>` + S.statuses.map(s => `<td>${v[s]}</td>`).join('') + '</tr>').join('');
-  $('manifestProblems').innerHTML = S.problems.map(p => '<li>' + esc(p) + '</li>').join('');
+  $('manifestProblems').innerHTML = S.problems.map(p => '<li>' + problemLine(p) + '</li>').join('');
+}
 
+// "Work on this": the tab where this asset is made, with it picked there
+const WORK_TIPS = { sfx: 'Open the Sounds tab with this sound picked', music: 'Open the Music tab with this track picked',
+  voice: 'Open the Voices tab: make a reading, then Use as asset…', pictures: 'Open the Pictures tab with For asset set to this sprite',
+  art: 'Open the Art tab showing just this image' };
+function workPlace(a) {
+  if (['sfx', 'music', 'voice'].includes(a.kind)) return a.kind;
+  if (!/\.png$/i.test(a.file)) return '';
+  return a.source === 'ai' && imageAssets().some(x => x.id === a.id) ? 'pictures' : 'art';
+}
+function workOn(id) {
+  const a = S.assets.find(x => x.id === id), place = a && workPlace(a);
+  if (place === 'sfx') { $('sfxPick').value = id; store.set('sfx', id); setTab('sounds'); }
+  else if (place === 'music') { $('musicPick').value = id; store.set('music', id); setTab('music'); }
+  else if (place === 'voice') { setTab('voices'); showStatus(`Make a reading here, then press Use as asset… under it and pick ${id}.`); }
+  else if (place === 'pictures') {
+    setTab('pictures');  // fills the For asset list
+    if ($('pFor').value !== id) { $('pFor').value = id; $('pFor').onchange(); }  // writes the description and size for it
+  } else if (place === 'art') {
+    for (const f of ['aKind', 'aStatus']) { $(f).value = ''; store.set(f, ''); }
+    for (const f of ['aMade', 'aFiles', 'aDrafts']) $(f).checked = false;
+    $('aText').value = id;
+    setTab('art');
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderAssets() {
+  renderProgress();
   const kind = $('fKind').value, status = $('fStatus').value, text = $('fText').value.trim().toLowerCase();
   const shown = S.assets.filter(a => (!kind || a.kind === kind) && statusMatch(a, status) &&
     (!text || [a.id, a.notes, a.file, a.replaces, a.source].join(' ').toLowerCase().includes(text)));
@@ -631,16 +750,19 @@ function renderAssets() {
     if (a.preview) thumb = `<div class="thumb"><img src="${a.preview}" alt=""></div>`;
     else if (a.url) thumb = `<div class="thumb none">${a.kind}</div>`;
     const lic = a.license && a.license.name ? ` · ${esc(a.license.name)} by ${esc(a.license.author || '?')}` : '';
-    return `<div class="card"><div class="assetRow">${thumb}<div>
-      <h3>${esc(a.id)} <span class="pill ${a.status}">${a.status}</span>${codePill(a)}</h3>
+    const place = workPlace(a);
+    return `<div class="card" data-card="${esc(a.id)}"><div class="assetRow">${thumb}<div>
+      <h3>${esc(a.id)} ${statusPill(a)}${codePill(a)}</h3>
       <div class="meta">${esc(a.kind)} · ${esc(a.source)}${sizeText(a) ? ' · ' + sizeText(a) : ''}${framesText(a) ? ' · ' + esc(framesText(a)) : ''} · ${esc(a.file)}${lic}</div>
       ${a.url ? `<audio controls preload="none" src="${a.url}"${a.loop ? ' loop' : ''}></audio>` : ''}
-      ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ''}
-      ${statusButtons(a)}</div></div></div>`;
+      ${notesBox(a.notes)}
+      <div class="foot">${statusButtons(a)}${place ? `<button class="work" data-work="${esc(a.id)}" title="${WORK_TIPS[place]}">Work on this →</button>` : ''}</div></div></div></div>`;
   }).join('') : '<div class="empty">Nothing matches.</div>';
+  $('assetList').querySelectorAll('[data-work]').forEach(b => b.onclick = () => workOn(b.dataset.work));
 }
 for (const id of ['fKind', 'fStatus']) $(id).onchange = () => { store.set(id, $(id).value); renderAssets(); };
-$('fText').oninput = () => renderAssets();
+let searchTimer = null;  // the list is drawn again once typing pauses, not on every key
+$('fText').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderAssets, 150); };
 $('validate').onclick = () => api('/api/validate');
 $('checkFiles').onclick = () => api('/api/check');
 $('credits').onclick = () => api('/api/credits');
@@ -659,13 +781,14 @@ async function renderSounds() {
   const a = sfxAsset();
   if (!a) { $('sfxCurrent').innerHTML = '<div class="empty">No sound effects in the manifest yet.</div>'; $('takeList').innerHTML = ''; return; }
   store.set('sfx', a.id);
+  const turn = newTurn('sounds');
   const data = await api('/api/sfx/takes', { id: a.id }, true);
-  if (!data) return;
+  if (!data || stale('sounds', turn)) return;
   const cur = data.current;
-  $('sfxCurrent').innerHTML = `<h3>${esc(a.id)} <span class="pill ${a.status}">${a.status}</span></h3>
+  $('sfxCurrent').innerHTML = `<h3>${esc(a.id)} ${statusPill(a)}</h3>
     <div class="meta">${esc(a.source)} · ${esc(a.file)}${a.replaces ? ' · replaces ' + esc(a.replaces) : ''}</div>
     ${cur ? `<audio controls src="${cur.url}"></audio>${shape(cur.info.shape)}${soundNumbers(cur.info)}` : '<div class="hint">No sound file yet.</div>'}
-    ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ''}
+    ${notesBox(a.notes)}
     ${statusButtons(a)}`;
   $('similarTakes').disabled = !data.has_params;
   $('similarTakes').title = data.has_params ? '' : 'Only for sfxr sounds that have settings (sounds/<id>.yaml): start from a preset first';
@@ -704,17 +827,19 @@ async function renderMusic() {
   $('musicLufs').placeholder = S.music_lufs ?? -16;
   const tracks = S.assets.filter(t => t.kind === 'music');
   $('musicList').innerHTML = tracks.length ? tracks.map(t => `<div class="card${t.id === (a && a.id) ? ' kept' : ''}">
-      <h3>${esc(t.id)} <span class="pill ${t.status}">${t.status}</span>${t.loop ? '' : ' <span class="pill">plays once</span>'}</h3>
+      <h3>${esc(t.id)} ${statusPill(t)}${t.loop ? '' : ' <span class="pill">plays once</span>'}</h3>
       <div class="meta">${esc(t.source)} · ${esc(t.file)}${t.replaces ? ' · ' + esc(t.replaces) : ''}</div>
       ${t.url ? `<audio controls preload="none" src="${t.url}"${t.loop ? ' loop' : ''}></audio>` : '<div class="hint">No file yet.</div>'}
       ${statusButtons(t)}</div>`).join('') : '<div class="empty">No music in the manifest yet.</div>';
   if (!a) { $('musicCurrent').innerHTML = ''; return; }
   store.set('music', a.id);
-  $('musicCurrent').innerHTML = `<h3>${esc(a.id)} <span class="pill ${a.status}">${a.status}</span></h3><div class="meta">${esc(a.source)} · ${esc(a.file)}</div>
+  $('musicCurrent').innerHTML = `<h3>${esc(a.id)} ${statusPill(a)}</h3><div class="meta">${esc(a.source)} · ${esc(a.file)}</div>
     ${a.url ? `<audio controls src="${a.url}"${a.loop ? ' loop' : ''}></audio><div class="numbers" id="musicNumbers">Measuring…</div>` : '<div class="hint">No file yet.</div>'}
-    ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ''}`;
+    ${notesBox(a.notes)}`;
   if (!a.url) return;
+  const turn = newTurn('musicInfo');
   const data = await api('/api/info', { id: a.id }, true);
+  if (stale('musicInfo', turn)) return;
   const el = $('musicNumbers');
   if (!data || !el || !data.info) { if (el) el.textContent = ''; return; }
   const i = data.info;
@@ -739,10 +864,10 @@ $('musicImport').onclick = async () => {
 function renderArt() {
   const scale = +$('aScale').value;
   $('aScaleText').textContent = scale + '×';
-  const kind = $('aKind').value, status = $('aStatus').value, made = $('aMade').checked;
+  const kind = $('aKind').value, status = $('aStatus').value, made = $('aMade').checked, text = $('aText').value.trim().toLowerCase();
   const images = S.assets.filter(a => ['sprite', 'tileset', 'icon', 'ui', 'font'].includes(a.kind) && (!kind || a.kind === kind) &&
     statusMatch(a, status) && (!made || a.preview) && (!$('aFiles').checked || (a.preview && !a.from_code)) &&
-    (!$('aDrafts').checked || a.draft_waiting));
+    (!$('aDrafts').checked || a.draft_waiting) && (!text || [a.id, a.notes, a.file].join(' ').toLowerCase().includes(text)));
   const waiting = images.filter(a => a.draft_waiting);
   $('artTitle').textContent = `Images (${images.length})` + (waiting.length ? ` · ${waiting.length} drafts waiting` : '');
   $('useDrafts').disabled = !waiting.length;
@@ -775,6 +900,8 @@ $('aScale').oninput = () => { store.set('aScale', $('aScale').value); renderArt(
 $('aMade').onchange = () => renderArt();
 $('aFiles').onchange = () => renderArt();
 $('aDrafts').onchange = () => renderArt();
+let artTimer = null;
+$('aText').oninput = () => { clearTimeout(artTimer); artTimer = setTimeout(renderArt, 150); };
 $('useDrafts').onclick = async () => {
   const ids = $('gallery').querySelectorAll('.tile.waiting [data-draw]');
   if (!ids.length || !confirm(`Put ${ids.length} of Claude's drafts into the game? Each one goes from todo to draft.`)) return;
@@ -830,6 +957,9 @@ const STYLES = {
 };
 const refs = [];
 let picCache = null;
+// tiles show a smaller copy of each picture (/thumb/, made once and kept); the full size is for the big view
+const THUMB_W = Math.min(1024, 160 * Math.ceil(2 * (window.devicePixelRatio || 1)));
+const thumbUrl = url => url ? url.replace('/file/', '/thumb/') + (url.includes('?') ? '&' : '?') + 'w=' + THUMB_W : '';
 $('styleChips').innerHTML = Object.keys(STYLES).map(k => `<button data-style="${esc(k)}">${esc(k)}</button>`).join('');
 $('styleChips').querySelectorAll('button').forEach(b => b.onclick = () => {
   const extra = STYLES[b.dataset.style], box = $('pPrompt');
@@ -902,6 +1032,7 @@ const ICONS = {
 const icon = (name, fill = false) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="${fill ? 'currentColor' : 'none'}" stroke="currentColor" ` +
   `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 // the words that matter in a description made by "For asset" or a pose (the part after the rules), else all of it
+const starTip = kept => kept ? 'Starred: press to unstar' : 'Star it, to find it again with Show: Starred';
 const shortPrompt = text => { const words = String(text || ''); const i = words.lastIndexOf(': '); return i >= 0 ? words.slice(i + 2) : words; };
 let picShow = store.get('picShow', 'all');
 
@@ -921,23 +1052,25 @@ async function renderPictures() {
   if (remembered) setSize(...shapeOf(remembered.size[0], remembered.size[1]), `Same shape as ${remembered.id} (${remembered.size[0]}×${remembered.size[1]})`);
   $('refBox').style.display = refs.length ? 'block' : 'none';
   const picUrl = name => ((picCache || []).find(x => x.name === name) || {}).url || '';
-  $('refList').innerHTML = refs.map(r => `<span title="${esc(r)}"><img src="${picUrl(r)}" alt="">${esc(shortPrompt(pictureMeta(r).prompt) || r).slice(0, 40)}` +
+  $('refList').innerHTML = refs.map(r => `<span title="${esc(r)}"><img src="${thumbUrl(picUrl(r))}" alt="">${esc(shortPrompt(pictureMeta(r).prompt) || r).slice(0, 40)}` +
     `<button data-unref="${esc(r)}" title="Stop working from this picture">${icon('close')}</button></span>`).join('');
   $('refList').querySelectorAll('[data-unref]').forEach(b => b.onclick = () => workFrom(b.dataset.unref));
+  const turn = newTurn('pictures');
   const data = await api('/api/pictures', {}, true);
-  if (!data) return;
+  if (!data || stale('pictures', turn)) return;
   picCache = data.pictures;
   const shown = data.pictures.filter(p => {
     const m = p.meta || {};
     return picShow === 'starred' ? m.kept : picShow === 'sprites' ? !!m.sprite_of : true;
   });
   $('picTitle').textContent = `Pictures (${shown.length === data.pictures.length ? shown.length : shown.length + ' of ' + data.pictures.length})`;
-  document.querySelectorAll('#picShow button').forEach(b => b.classList.toggle('on', b.dataset.show === picShow));
-  document.querySelectorAll('#picView button').forEach(b => b.classList.toggle('on', (b.dataset.all === '1') === allInGame));
+  document.querySelectorAll('#picShow button').forEach(b => setOn(b, b.dataset.show === picShow));
+  document.querySelectorAll('#picView button').forEach(b => setOn(b, (b.dataset.all === '1') === allInGame));
   const cut = S.engines && S.engines.cutout, cutReady = !!(cut && cut.installed);
   const wasUsing = [...document.querySelectorAll('.pic.using')].map(c => c.dataset.name);  // opened again below
   const targets = imageAssets();
-  const assetOptions = targets.map(a => option(a.id, `${a.id} (${a.size.join('×')}, ${a.status})`, false)).join('');
+  // no sprite picked until you pick one (or the picture was made for one): Use never guesses
+  const assetOptions = option('', '(pick one)', true) + targets.map(a => option(a.id, `${a.id} (${a.size.join('×')}, ${a.status})`, false)).join('');
   $('picList').innerHTML = shown.length ? shown.map(p => {
     const m = p.meta || {}, n = esc(p.name), sprite = !!m.sprite_of;  // a game-sized sprite kept by Make sprite or Touch up with Claude
     const tags = [m.touchup ? '<span class="tag draft">touch-up draft</span>' : sprite ? '<span class="tag">sprite</span>' : '',
@@ -967,9 +1100,9 @@ async function renderPictures() {
     return `<div class="card pic${m.kept ? ' kept' : ''}${refs.includes(p.name) ? ' from' : ''}" data-name="${n}">
      <div class="side">
       <div class="shotwrap">
-        <img class="shot${m.cutout_of || sprite ? ' cut' : ''}${sprite ? ' sprite' : ''}" src="${p.url}" alt="" loading="lazy" width="${+m.width || 1}" height="${+m.height || 1}"><div class="gameview"></div>
-        <button class="star${m.kept ? ' on' : ''}" data-pkeep="${n}" data-kept="${m.kept ? 1 : 0}" title="${m.kept ? 'Starred: press to unstar' : 'Star it, to find it again with Show: Starred'}">${icon('star', m.kept)}</button>
-        <div class="seg pick viewseg"><button data-game="${n}" data-to="0" class="${inGame(p.name) ? '' : 'on'}" title="The picture itself">Picture</button><button data-game="${n}" data-to="1" class="${inGame(p.name) ? 'on' : ''}" title="The sprite it makes, at the game's size and scale on the floor">In game</button></div>
+        <img class="shot${m.cutout_of || sprite ? ' cut' : ''}${sprite ? ' sprite' : ''}" src="${thumbUrl(p.url)}" data-full="${p.url}" alt="${esc(shortPrompt(m.prompt) || p.name)}" title="Click to see it full size" tabindex="0" role="button" loading="lazy" width="${+m.width || 1}" height="${+m.height || 1}"><div class="gameview"></div>
+        <button class="star${m.kept ? ' on' : ''}" data-pkeep="${n}" data-kept="${m.kept ? 1 : 0}" aria-pressed="${!!m.kept}" title="${starTip(m.kept)}">${icon('star', m.kept)}</button>
+        <div class="seg pick viewseg"><button data-game="${n}" data-to="0" class="${inGame(p.name) ? '' : 'on'}" aria-pressed="${!inGame(p.name)}" title="The picture itself">Picture</button><button data-game="${n}" data-to="1" class="${inGame(p.name) ? 'on' : ''}" aria-pressed="${inGame(p.name)}" title="The sprite it makes, at the game's size and scale on the floor">In game</button></div>
       </div>
       <div class="title" title="${esc(m.prompt || '')}">${title}</div>
       <div class="tags">${tags}</div>
@@ -1007,11 +1140,27 @@ async function renderPictures() {
     </div>`;
   }).join('') : `<div class="empty">${data.pictures.length ? 'Nothing to show here: try Show: All.' : 'No pictures yet. Describe one and press <b>Make it</b>.'}</div>`;
   const byName = n => data.pictures.find(p => p.name === n);
-  $('picList').querySelectorAll('img.shot').forEach(img => img.onclick = () => { $('bigPic').querySelector('img').src = img.src; $('bigPic').style.display = 'flex'; });
-  $('picList').querySelectorAll('[data-pkeep]').forEach(b => b.onclick = async () => {
-    if (await api('/api/pictures/keep', { name: b.dataset.pkeep, kept: b.dataset.kept !== '1' }, true)) renderPictures(); });
+  $('picList').querySelectorAll('img.shot').forEach(img => img.onclick = () => openBigPic(img));
+  $('picList').querySelectorAll('[data-pkeep]').forEach(b => b.onclick = async () => {  // only this star changes
+    const kept = b.dataset.kept !== '1';
+    if (!await api('/api/pictures/keep', { name: b.dataset.pkeep, kept }, true)) return;
+    const p = byName(b.dataset.pkeep);
+    if (p) p.meta = { ...(p.meta || {}), kept };
+    b.dataset.kept = kept ? 1 : 0;
+    setOn(b, kept);
+    b.title = starTip(kept);
+    b.innerHTML = icon('star', kept);
+    b.closest('.pic').classList.toggle('kept', kept);
+  });
   $('picList').querySelectorAll('[data-premove]').forEach(b => b.onclick = async () => {
-    if (await api('/api/pictures/remove', { name: b.dataset.premove })) renderPictures(); });
+    const name = b.dataset.premove, m = (byName(name) || {}).meta || {};
+    if (m.kept && !confirm(`Remove the starred picture ${name}? It moves to pictures/_removed (not deleted).`)) return;
+    if (await api('/api/pictures/remove', { name }, true)) {
+      showStatus(`Moved ${name} to pictures/_removed (not deleted: move it back to get it again).`);
+      statusTimer = setTimeout(hideStatus, 6000);
+      renderPictures();
+    }
+  });
   $('picList').querySelectorAll('[data-again]').forEach(b => b.onclick = () => {
     const m = byName(b.dataset.again).meta;
     startJob('/api/pictures/make', { prompt: m.prompt, width: m.width, height: m.height, tile: m.tile, takes: 1, refs: m.refs || [], for: m.for || '' });
@@ -1040,12 +1189,24 @@ async function renderPictures() {
   const useSettings = (box, name) => ({ name, id: box.querySelector('.asset').value, frame: box.querySelector('.frame').value,
     background: box.querySelector('.bg').checked, snap: box.querySelector('.snap').checked,
     outline: box.querySelector('.outline') ? box.querySelector('.outline').checked : false });
-  // the preview: zoomed on a checkerboard, and in game (the game's scale, on its floor)
-  async function previewUse(box, name) {
+  // the preview: zoomed on a checkerboard, and in game (the game's scale, on its floor). Asked for once the options
+  // stop changing; only the newest answer is shown.
+  function previewUse(box, name, wait = 250) {
     const settings = useSettings(box, name), [zoomed, game] = box.querySelectorAll('.preview figure');
-    if (!settings.id) return;
+    clearTimeout(box.previewTimer);
+    const turn = box.previewTurn = (box.previewTurn || 0) + 1;
+    if (!settings.id) {
+      box.querySelectorAll('.preview img').forEach(i => i.removeAttribute('src'));
+      box.querySelectorAll('.preview figcaption').forEach((f, k) => { f.textContent = k ? '' : 'Pick which sprite first'; });
+      return;
+    }
+    zoomed.querySelector('figcaption').textContent = 'Making the preview…';
+    box.previewTimer = setTimeout(() => showUsePreview(box, settings, turn, zoomed, game), wait);
+  }
+  async function showUsePreview(box, settings, turn, zoomed, game) {
     const data = await api('/api/pictures/preview', settings, true);
-    if (!data) { box.querySelectorAll('.preview img').forEach(i => i.removeAttribute('src')); return; }
+    if (turn !== box.previewTurn) return;  // the options changed meanwhile: a newer preview is on its way
+    if (!data) { box.querySelectorAll('.preview img').forEach(i => i.removeAttribute('src')); zoomed.querySelector('figcaption').textContent = ''; return; }
     const zoom = Math.max(2, Math.floor(128 / Math.max(data.width, data.height))), scale = gameScale();
     Object.assign(zoomed.querySelector('img'), { src: data.image, width: data.width * zoom, height: data.height * zoom });
     zoomed.querySelector('figcaption').textContent = `${data.width}×${data.height}, zoomed ×${zoom}`;
@@ -1069,13 +1230,14 @@ async function renderPictures() {
     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     if (box.dataset.for && [...box.querySelector('.asset').options].some(o => o.value === box.dataset.for)) box.querySelector('.asset').value = box.dataset.for;
     fillFrames(box);
-    previewUse(box, b.dataset.useopen);
+    previewUse(box, b.dataset.useopen, 0);
     box.querySelector('.asset').onchange = () => { fillFrames(box); previewUse(box, b.dataset.useopen); if (inGame(b.dataset.useopen)) showInGame(b.dataset.useopen); };
     box.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = () => previewUse(box, b.dataset.useopen));
   });
+  const pickFirst = () => showStatus('Pick which sprite it is for first (Which sprite).', false, true);
   $('picList').querySelectorAll('[data-sprite]').forEach(b => b.onclick = async () => {
     const settings = useSettings(document.getElementById('use-' + b.dataset.sprite), b.dataset.sprite);
-    if (!settings.id) return;
+    if (!settings.id) return pickFirst();
     if (await api('/api/pictures/sprite', settings)) renderPictures();
   });
   $('picList').querySelectorAll('[data-touchnow]').forEach(b => b.onclick = () => {
@@ -1085,18 +1247,31 @@ async function renderPictures() {
   });
   $('picList').querySelectorAll('[data-touch]').forEach(b => b.onclick = async () => {
     const settings = useSettings(document.getElementById('use-' + b.dataset.touch), b.dataset.touch);
-    if (!settings.id) return;
+    if (!settings.id) return pickFirst();
     touchUp({ ...settings, frames: { [settings.frame || settings.id]: settings.name } });
   });
   $('picList').querySelectorAll('[data-use]').forEach(b => b.onclick = async () => {
     const settings = useSettings(document.getElementById('use-' + b.dataset.use), b.dataset.use);
-    if (!settings.id) return;
+    if (!settings.id) return pickFirst();
     const done = await api('/api/pictures/use', settings);
     if (done) load();
   });
   wasUsing.forEach(name => { const b = $('picList').querySelector(`[data-useopen="${CSS.escape(name)}"]`); if (b) b.click(); });
 }
-$('bigPic').onclick = () => { $('bigPic').style.display = 'none'; };
+// the big view of a picture: click it or press Escape to close; the keyboard goes back to the tile
+let bigFrom = null;
+function openBigPic(img) {
+  bigFrom = img;
+  $('bigPic').querySelector('img').src = img.dataset.full || img.src;
+  $('bigPic').style.display = 'flex';
+  $('bigPic').focus();
+}
+function closeBigPic() {
+  $('bigPic').style.display = 'none';
+  if (bigFrom && document.contains(bigFrom)) bigFrom.focus();
+  bigFrom = null;
+}
+$('bigPic').onclick = closeBigPic;
 $('clearRefs').onclick = () => { refs.splice(0); renderPictures(); };
 $('setupPicture').onclick = () => startJob('/api/engines/setup', { name: 'picture' });
 $('makePictures').onclick = () => {
@@ -1142,7 +1317,7 @@ document.querySelectorAll('#picView button').forEach(b => b.onclick = () => {
   allInGame = b.dataset.all === '1';
   store.set('gameAll', allInGame ? '1' : '');
   Object.keys(gameView).forEach(k => delete gameView[k]);
-  document.querySelectorAll('#picView button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('#picView button').forEach(x => setOn(x, x === b));
   (picCache || []).forEach(p => showInGame(p.name));
 });
 document.querySelectorAll('#picShow button').forEach(b => b.onclick = () => {
@@ -1164,7 +1339,7 @@ async function showInGame(name) {
   if (!card) return;
   const on = inGame(name), view = card.querySelector('.gameview');
   card.classList.toggle('ingame', on);
-  card.querySelectorAll('[data-game]').forEach(b => b.classList.toggle('on', (b.dataset.to === '1') === on));
+  card.querySelectorAll('[data-game]').forEach(b => setOn(b, (b.dataset.to === '1') === on));
   if (!on) return;
   const a = pictureAsset(name), floor = floorColor();
   view.style.background = floor;
@@ -1194,8 +1369,8 @@ function openAnimation(name) {
     showStatus(`${m.for} isn't animated in assets.yaml: it needs more than one frame in frames:, and frame_files: true.`, false, true);
     return;
   }
-  const id =assets.some(a => a.id === m.for) ? m.for : (assets[0] || {}).id;
-  if (!id) { showStatus('No animated sprites in assets.yaml (they need frames: and frame_files: true).', false, true); return; }
+  if (!assets.length) { showStatus('No animated sprites in assets.yaml (they need frames: and frame_files: true).', false, true); return; }
+  const id = assets.some(a => a.id === m.for) ? m.for : '';  // not made for one: you pick it (never a guess)
   anim = { id, base: name, sprite: !!m.sprite_of, slots: {}, poses: {} };
   pickAnimationAsset(id);
   $('animPanel').scrollIntoView({ behavior: 'smooth' });
@@ -1222,6 +1397,7 @@ function pickAnimationAsset(id) {
   const a = S.assets.find(x => x.id === id), base = (picCache || []).find(p => p.name === anim.base);
   anim.id = id;
   anim.slots = {};
+  if (!a) { renderAnimation(true); return; }  // nothing picked yet
   anim.poses = { ...(a.poses || {}) };
   // the picture you started from goes in its own frame (a sprite) or the first one
   const baseFrame = anim.sprite && a.targets.includes(pictureMeta(anim.base).frame) ? pictureMeta(anim.base).frame : a.targets[0];
@@ -1238,7 +1414,19 @@ function renderAnimation(changed) {
   const panel = $('animPanel');
   if (!anim) { panel.classList.remove('open'); return; }
   const a = S.assets.find(x => x.id === anim.id);
-  if (!a) { anim = null; panel.classList.remove('open'); return; }
+  const head = `<h2 style="margin-top:0">Animate <select id="animAsset" style="width:auto;display:inline-block;margin-left:6px">${
+      option('', '(pick one)', !a)}${animatedAssets().map(x =>
+      option(x.id, `${x.id} (${x.size.join('×')}, ${Object.entries(x.frames).map(([n, c]) => n + ' ' + c).join(', ')})`, x.id === anim.id)).join('')}</select>
+      <button id="animClose" style="float:right;font-size:12px">Close</button></h2>`;
+  if (!a) {  // the picture wasn't made for an animated sprite: ask which one first
+    if (anim.id) { anim = null; panel.classList.remove('open'); return; }  // gone from assets.yaml
+    clearInterval(animTimer);
+    panel.innerHTML = head + `<div class="hint">Which animated sprite is <b>${esc(anim.base)}</b> for? Pick it above: one box per frame shows up.</div>`;
+    panel.classList.add('open');
+    $('animAsset').onchange = () => pickAnimationAsset($('animAsset').value);
+    $('animClose').onclick = () => { anim = null; renderAnimation(); };
+    return;
+  }
   // fill frames that are still empty with pictures made for them since (e.g. by Make the missing frames)
   a.targets.forEach(t => {
     if (anim.slots[t]) return;
@@ -1251,10 +1439,7 @@ function renderAnimation(changed) {
   const missing = a.targets.filter(t => !anim.slots[t]);
   const keep = {};
   panel.querySelectorAll('input[type=checkbox]').forEach(c => keep[c.className] = c.checked);
-  panel.innerHTML = `
-    <h2 style="margin-top:0">Animate <select id="animAsset" style="width:auto;display:inline-block;margin-left:6px">${animatedAssets().map(x =>
-      option(x.id, `${x.id} (${x.size.join('×')}, ${Object.entries(x.frames).map(([n, c]) => n + ' ' + c).join(', ')})`, x.id === anim.id)).join('')}</select>
-      <button id="animClose" style="float:right;font-size:12px">Close</button></h2>
+  panel.innerHTML = head + `
     <div class="hint">${anim.sprite
       ? `Animating sprites (${a.size.join('×')}): they're too small for the AI to draw new frames, so Claude draws them.
         <b>Animate with Claude</b> adds a draft of every frame to your pictures (empty ones start as a copy of the frame before);
@@ -1264,7 +1449,7 @@ function renderAnimation(changed) {
     <div class="slots">${a.targets.map(t => `<div class="slot">
       <b>${esc(t)}</b>
       <select data-slot="${esc(t)}">${options(t)}</select>
-      ${anim.slots[t] ? `<img class="thumb${anim.sprite ? ' px' : ''}" src="${esc((pics.find(p => p.name === anim.slots[t]) || {}).url || '')}" alt="">`
+      ${anim.slots[t] ? `<img class="thumb${anim.sprite ? ' px' : ''}" src="${esc(thumbUrl((pics.find(p => p.name === anim.slots[t]) || {}).url))}" alt="">`
         : anim.sprite ? '<div class="hint">Empty: Claude draws it</div>' : `<textarea data-pose="${esc(t)}">${esc(anim.poses[t] || '')}</textarea>`}
     </div>`).join('')}</div>
     <div class="buttons">
@@ -1362,8 +1547,9 @@ const mb = bytes => bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Ma
 const packOf = name => (packData && packData.packs.find(p => p.name === name)) || null;
 
 async function renderPacks() {
+  const turn = newTurn('packs');
   const data = await api('/api/packs', {}, true);
-  if (!data) return;
+  if (!data || stale('packs', turn)) return;
   packData = data;
   $('packsFolder').textContent = data.folder;
   $('downloadList').innerHTML = data.downloads.length ? data.downloads.map(d => `<div class="card download">
@@ -1384,7 +1570,7 @@ async function renderPacks() {
     const files = p.license_files.map(f => `<li><a href="${f.url}" target="_blank" rel="noopener">${esc(f.file)}</a>` +
       (f.hints.length ? ` <span class="hint">(mentions: ${esc(f.hints.join(', '))})</span>` : '') + '</li>').join('');
     return `<div class="card packcard${open === p.name ? ' on' : ''}">
-      <h3 data-popen="${n}" title="Show or hide its license">${n} ${licensePill(p)}</h3>
+      <h3 data-popen="${n}" tabindex="0" role="button" aria-expanded="${open === p.name}" title="Show or hide its license">${n} ${licensePill(p)}</h3>
       <div class="meta">${p.has_license ? 'credit: ' + esc(p.license.author) : 'Read its license file, then fill in the license (never a guess)'}${count}</div>
       <div${open === p.name ? '' : ' hidden'}>
         ${files ? `<div class="hint">License and readme files (the "mentions" are hints, not the answer):</div><ul class="files">${files}</ul>`
@@ -1409,6 +1595,7 @@ async function renderPacks() {
   });
   fillSelect($('kPack'), [['', 'All packs'], ...data.packs.map(p => [p.name, p.name])], store.get('kPack', ''));
   await loadPackImages();
+  if (stale('packs', turn)) return;
   renderPackGrid();
   if (cutter) {
     if (packOf(cutter.pack)) renderCutter(); else closeCutter();
@@ -1447,8 +1634,8 @@ function renderPackGrid() {
     const folder = i.file.includes('/') ? i.file.slice(0, i.file.lastIndexOf('/')) : '';
     const open = cutter && cutter.pack === i.pack && cutter.file === i.file;
     return `<div class="ptile${open ? ' open' : ''}">
-      <div class="pimg" data-kcut="${k}" title="Box a part of it, to use in the game or copy to your pictures"><img src="${i.url}" loading="lazy" alt="" width="${i.width * zoom}" height="${i.height * zoom}"></div>
-      <button class="star${i.starred ? ' on' : ''}" data-kstar="${k}" title="${i.starred ? 'On the shortlist: press to take it off' : 'Add to the shortlist, to find it with Only the shortlist'}">${icon('star', i.starred)}</button>
+      <div class="pimg" data-kcut="${k}" tabindex="0" role="button" aria-label="Box a part of ${esc(i.file)}" title="Box a part of it, to use in the game or copy to your pictures"><img src="${i.url}" loading="lazy" alt="" width="${i.width * zoom}" height="${i.height * zoom}"></div>
+      <button class="star${i.starred ? ' on' : ''}" data-kstar="${k}" aria-pressed="${i.starred}" title="${i.starred ? 'On the shortlist: press to take it off' : 'Add to the shortlist, to find it with Only the shortlist'}">${icon('star', i.starred)}</button>
       <div class="fname" title="${esc(i.file)}">${esc(i.file.split('/').pop())}</div>
       <div class="meta">${i.width}×${i.height} · ${esc(i.pack)}${folder ? ' · ' + esc(folder) : ''}</div></div>`;
   }).join('') : `<div class="empty">${packData.packs.length ? 'Nothing matches.' : 'Import a download (left) to see its images here.'}</div>`;
@@ -1462,7 +1649,8 @@ function renderPackGrid() {
   });
 }
 $('kPack').onchange = async () => { store.set('kPack', $('kPack').value); packLimit = 120; await loadPackImages(); renderPackGrid(); };
-$('kText').oninput = () => { packLimit = 120; renderPackGrid(); };
+let packTimer = null;
+$('kText').oninput = () => { clearTimeout(packTimer); packTimer = setTimeout(() => { packLimit = 120; renderPackGrid(); }, 150); };
 $('kStarred').onchange = $('kSmall').onchange = () => { packLimit = 120; renderPackGrid(); };
 $('packMore').onclick = () => { packLimit += 120; renderPackGrid(); };
 
@@ -1629,8 +1817,10 @@ function previewCut() {
     if (!c || !box) return;
     const [zoomed, game] = box.querySelectorAll('figure');
     if (!c.id) { box.querySelectorAll('img').forEach(i => i.removeAttribute('src')); zoomed.querySelector('figcaption').textContent = 'pick a sprite'; return; }
+    zoomed.querySelector('figcaption').textContent = 'Making the preview…';
+    const turn = newTurn('cut');
     const data = await api('/api/packs/preview', { pack: c.pack, file: c.file, box: c.box, id: c.id, snap: c.snap, outline: c.outline }, true);
-    if (!data) return;
+    if (!data || stale('cut', turn)) return;
     const zoom = Math.max(2, Math.floor(128 / Math.max(data.width, data.height))), scale = gameScale();
     Object.assign(zoomed.querySelector('img'), { src: data.image, width: data.width * zoom, height: data.height * zoom });
     zoomed.querySelector('figcaption').textContent = `${data.width}×${data.height}, zoomed ×${zoom}` +
@@ -1669,10 +1859,11 @@ async function renderMusicTakes() {
   $('musicForm').style.display = ready ? 'block' : 'none';
   if (engine) $('musicEngineInfo').innerHTML = `Music is made on this PC with ${esc(engine.model)} (${esc(engine.license)} licence: free to use, ` +
     `also in games you sell). Setting up installs it for your graphics card into <code>${esc(engine.folder)}</code> (a few GB, several minutes).`;
+  const turn = newTurn('musicTakes');
   const data = await api('/api/musictakes', {}, true);
-  if (!data) return;
+  if (!data || stale('musicTakes', turn)) return;
   const tracks = S.assets.filter(a => a.kind === 'music');
-  const trackOptions = tracks.map(a => option(a.id, `${a.id} (${a.status})`, a.id === $('musicPick').value)).join('');
+  const trackOptions = option('', '(pick one)', true) + tracks.map(a => option(a.id, `${a.id} (${a.status})`, false)).join('');
   $('takeTitle').textContent = `AI takes (${data.takes.length})`;
   $('musicTakes').innerHTML = data.takes.length ? data.takes.map(t => {
     const m = t.meta || {};
@@ -1685,11 +1876,11 @@ async function renderMusicTakes() {
         <button data-mkeep="${esc(t.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
         <button data-magain="${esc(t.name)}" title="Same settings, new seed">Another take</button>
         <button data-madjust="${esc(t.name)}" title="Put its settings back in the form">Adjust</button>
-        <button data-museopen="${esc(t.name)}">Use for a track…</button>
+        <button data-museopen="${esc(t.name)}" aria-expanded="false">Use for a track…</button>
         <button data-mremove="${esc(t.name)}" title="Moves it to music-takes/_removed">Remove</button>
       </div>
-      <div class="use" id="muse-${esc(t.name)}">
-        <select>${trackOptions}</select>
+      <div class="use takeuse" id="muse-${esc(t.name)}">
+        <label>Which track</label><select>${trackOptions}</select>
         <div class="row3"><div><label>Start (s)</label><input type="number" class="start" min="0" step="0.01"></div>
           <div><label>End (s)</label><input type="number" class="end" min="0" step="0.01"></div>
           <div><label>Loudness</label><input type="number" class="lufs" step="0.5" placeholder="${S.music_lufs ?? -16}"></div></div>
@@ -1705,6 +1896,7 @@ async function renderMusicTakes() {
   box.querySelectorAll('[data-mkeep]').forEach(b => b.onclick = async () => {
     if (await api('/api/musictakes/keep', { name: b.dataset.mkeep, kept: b.dataset.kept !== '1' }, true)) renderMusicTakes(); });
   box.querySelectorAll('[data-mremove]').forEach(b => b.onclick = async () => {
+    if ((byName(b.dataset.mremove) || {}).kept && !confirm(`Remove the kept take ${b.dataset.mremove}? It moves to music-takes/_removed (not deleted).`)) return;
     if (await api('/api/musictakes/remove', { name: b.dataset.mremove })) renderMusicTakes(); });
   box.querySelectorAll('[data-magain]').forEach(b => b.onclick = () => {
     const m = byName(b.dataset.magain);
@@ -1721,12 +1913,11 @@ async function renderMusicTakes() {
     $('mSeed').value = m.seed ?? '';
     $('mPrompt').focus();
   });
-  box.querySelectorAll('[data-museopen]').forEach(b => b.onclick = () =>
-    document.getElementById('muse-' + b.dataset.museopen).classList.toggle('open'));
+  box.querySelectorAll('[data-museopen]').forEach(b => b.onclick = () => togglePanel(b, document.getElementById('muse-' + b.dataset.museopen)));
   box.querySelectorAll('[data-muse]').forEach(b => b.onclick = async () => {
     const panel = document.getElementById('muse-' + b.dataset.muse);
     const id = panel.querySelector('select').value;
-    if (!id) return;
+    if (!id) { showStatus('Pick which track first.', false, true); return; }
     const done = await api('/api/musictakes/use', { name: b.dataset.muse, id, start: panel.querySelector('.start').value,
       end: panel.querySelector('.end').value, loudness: panel.querySelector('.lufs').value });
     if (done) { $('musicPick').value = id; load(); }
@@ -1739,6 +1930,12 @@ $('makeMusic').onclick = () => startJob('/api/musictakes/make', {
 
 // ---------- AI sound and voice takes (shared list) ----------
 const takeState = {};   // kind -> last list
+// a "Use…" button opens its panel under the take; the button stays lit while it's open
+function togglePanel(button, panel) {
+  const open = panel.classList.toggle('open');
+  button.classList.toggle('on', open);
+  button.setAttribute('aria-expanded', open);
+}
 function engineBlock(kind, setupId, formId, infoId) {
   const engine = S.engines && S.engines[kind];
   const ready = engine && engine.installed;
@@ -1749,11 +1946,12 @@ function engineBlock(kind, setupId, formId, infoId) {
     (engine.note ? `<br><b>First:</b> ${esc(engine.note)}` : '');
 }
 async function renderTakes(kind, listId, titleId, title, assetKinds, fill) {
+  const turn = newTurn('takes-' + kind);
   const data = await api('/api/takes', { kind }, true);
-  if (!data) return;
+  if (!data || stale('takes-' + kind, turn)) return;
   takeState[kind] = data.takes;
   const targets = S.assets.filter(a => assetKinds.includes(a.kind) && a.file.toLowerCase().endsWith('.wav'));
-  const options = targets.map(a => option(a.id, `${a.id} (${a.kind}, ${a.status})`, false)).join('');
+  const options = option('', '(pick one)', true) + targets.map(a => option(a.id, `${a.id} (${a.kind}, ${a.status})`, false)).join('');
   $(titleId).textContent = `${title} (${data.takes.length})`;
   $(listId).innerHTML = data.takes.length ? data.takes.map(t => {
     const m = t.meta || {};
@@ -1767,11 +1965,11 @@ async function renderTakes(kind, listId, titleId, title, assetKinds, fill) {
         <button data-tkeep="${esc(t.name)}" data-kept="${m.kept ? 1 : 0}">${m.kept ? '★ Kept' : '☆ Keep'}</button>
         <button data-tagain="${esc(t.name)}" title="Same settings, new seed">Another take</button>
         <button data-tadjust="${esc(t.name)}" title="Put its settings back in the form">Adjust</button>
-        <button data-tuseopen="${esc(t.name)}">Use as asset…</button>
-        <button data-tremove="${esc(t.name)}">Remove</button>
+        <button data-tuseopen="${esc(t.name)}" aria-expanded="false">Use as asset…</button>
+        <button data-tremove="${esc(t.name)}" title="Moves it to ${kind === 'voice' ? 'voice' : 'sound'}-takes/_removed">Remove</button>
       </div>
-      <div class="use" id="tuse-${kind}-${esc(t.name)}">
-        ${targets.length ? `<select>${options}</select>` : `<div class="hint">No ${assetKinds.join(' or ')} assets with a .wav file in assets.yaml yet.</div>`}
+      <div class="use takeuse" id="tuse-${kind}-${esc(t.name)}">
+        ${targets.length ? `<label>Which asset</label><select>${options}</select>` : `<div class="hint">No ${assetKinds.join(' or ')} assets with a .wav file in assets.yaml yet.</div>`}
         <div class="buttons"><button data-tuse="${esc(t.name)}">Use</button></div>
         <div class="hint">Made into the asset's WAV: mono, 16-bit, trimmed${kind === 'sound' ? ' (not seamless loops)' : ''}, at the game's level.</div>
       </div>
@@ -1783,15 +1981,16 @@ async function renderTakes(kind, listId, titleId, title, assetKinds, fill) {
   box.querySelectorAll('[data-tkeep]').forEach(b => b.onclick = async () => {
     if (await api('/api/takes/keep', { kind, name: b.dataset.tkeep, kept: b.dataset.kept !== '1' }, true)) renderAll(); });
   box.querySelectorAll('[data-tremove]').forEach(b => b.onclick = async () => {
+    if ((meta(b.dataset.tremove) || {}).kept && !confirm(`Remove the kept take? It moves to the _removed folder (not deleted).`)) return;
     if (await api('/api/takes/remove', { kind, name: b.dataset.tremove })) renderAll(); });
   box.querySelectorAll('[data-tagain]').forEach(b => b.onclick = () => startJob(make, { ...meta(b.dataset.tagain), takes: 1, seed: null }));
   box.querySelectorAll('[data-tadjust]').forEach(b => b.onclick = () => fill(meta(b.dataset.tadjust)));
-  box.querySelectorAll('[data-tuseopen]').forEach(b => b.onclick = () =>
-    document.getElementById(`tuse-${kind}-${b.dataset.tuseopen}`).classList.toggle('open'));
+  box.querySelectorAll('[data-tuseopen]').forEach(b => b.onclick = () => togglePanel(b, document.getElementById(`tuse-${kind}-${b.dataset.tuseopen}`)));
   box.querySelectorAll('[data-tuse]').forEach(b => b.onclick = async () => {
     const panel = document.getElementById(`tuse-${kind}-${b.dataset.tuse}`);
     const select = panel.querySelector('select');
     if (!select) return;
+    if (!select.value) { showStatus('Pick which asset first.', false, true); return; }
     if (await api('/api/takes/use', { kind, name: b.dataset.tuse, id: select.value })) load();
   });
 }

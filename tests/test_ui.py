@@ -1,6 +1,8 @@
 import contextlib
+import http.client
 import io
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -10,6 +12,8 @@ import unittest.mock
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugins" / "gamekit" / "scripts"))
 
@@ -208,6 +212,73 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(hero["draft_waiting"])
         code, png = self.get(hero["preview"])
         self.assertEqual((code, png[:4]), (200, b"\x89PNG"))
+
+    def head(self, path: str, headers: dict | None = None) -> tuple[int, dict, bytes]:
+        """A GET with its answer's headers."""
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1])
+        connection.request("GET", path, headers=headers or {})
+        response = connection.getresponse()
+        answer = (response.status, dict(response.getheaders()), response.read())
+        connection.close()
+        return answer
+
+    def raw_post(self, path: str, body: bytes, length: str) -> tuple[int, dict]:
+        """A POST with any body and Content-Length, even wrong ones."""
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1])
+        connection.putrequest("POST", path)
+        for name, value in (("X-Gamekit", "1"), ("Content-Type", "application/json"), ("Content-Length", length)):
+            connection.putheader(name, value)
+        connection.endheaders(body)
+        response = connection.getresponse()
+        answer = (response.status, json.loads(response.read()))
+        connection.close()
+        return answer
+
+    def test_versioned_files_are_cached(self) -> None:
+        self.assertEqual(self.head("/file/secret.txt?v=12")[1]["Cache-Control"], ui.IMMUTABLE)
+        self.assertEqual(self.head("/file/secret.txt")[1]["Cache-Control"], "no-store")
+        self.assertEqual(self.head("/api/state")[1]["Cache-Control"], "no-store")
+        hero = self.root / "assets" / "sprites" / "hero.png"
+        hero.parent.mkdir(parents=True)
+        Image.new("RGBA", (16, 16), (200, 30, 30, 255)).save(hero)
+        url = json.loads(self.get("/api/state")[1])["assets"][0]["preview"]
+        code, headers, png = self.head(url)
+        self.assertEqual((code, headers["Cache-Control"], png[:4]), (200, ui.IMMUTABLE, b"\x89PNG"))
+        self.assertEqual(self.head(url.split("&k=")[0])[1]["Cache-Control"], "no-store")  # v alone can miss changes
+        palette = self.root / "palette.hex"  # not the asset's own file (its v stays), but the preview's k changes
+        os.utime(palette, ns=(palette.stat().st_atime_ns, palette.stat().st_mtime_ns + 5_000_000_000))
+        self.assertNotEqual(json.loads(self.get("/api/state")[1])["assets"][0]["preview"], url)
+        Image.new("RGBA", (16, 16), (30, 200, 30, 255)).save(hero)
+        os.utime(hero, ns=(hero.stat().st_atime_ns, hero.stat().st_mtime_ns + 5_000_000_000))
+        newer = json.loads(self.get("/api/state")[1])["assets"][0]["preview"]
+        self.assertNotEqual(self.head(newer)[2], png)  # a changed file is drawn again
+
+    def test_bad_requests_get_an_answer(self) -> None:
+        code, data = self.raw_post("/api/status", b"[1, 2]", "6")
+        self.assertEqual(code, 400)
+        self.assertIn("JSON object", data["error"])
+        self.assertEqual(self.raw_post("/api/status", b"{}", "lots")[0], 400)
+        self.assertEqual(self.raw_post("/api/status", b"\xff\xfe{", "3")[0], 400)
+
+    def test_thumbnails(self) -> None:
+        folder = self.root / "pictures"
+        folder.mkdir()
+        Image.new("RGB", (1024, 512), (10, 120, 200)).save(folder / "big.png")
+        Image.new("RGBA", (12, 12), (10, 120, 200, 255)).save(folder / "tiny.png")
+        code, headers, data = self.head("/thumb/pictures/big.png?w=320&v=5")
+        self.assertEqual((code, headers["Content-Type"], headers["Cache-Control"]), (200, "image/jpeg", ui.IMMUTABLE))
+        self.assertEqual(Image.open(io.BytesIO(data)).size, (320, 160))
+        code, headers, data = self.head("/thumb/pictures/tiny.png?w=320")
+        self.assertEqual((code, data), (200, (folder / "tiny.png").read_bytes()))  # already small: as it is
+        self.assertEqual(self.head("/thumb/..%2F..%2Fetc%2Fpasswd?w=320")[0], 404)  # never outside the game folder
+        self.assertEqual(self.head("/thumb/../" + self.root.name + "x/pictures/big.png")[0], 404)
+        self.assertEqual(self.head("/thumb/secret.txt")[0], 404)  # only images
+        self.assertEqual(self.head("/thumb/pictures/big.png?w=wide")[0], 400)
+
+    def test_actions_wait_for_each_other(self) -> None:
+        ui.ACTION.acquire()
+        threading.Timer(0.3, ui.ACTION.release).start()  # another action finishing a moment later
+        self.assertEqual(self.post("/api/status", {"id": "hero", "status": "draft"})[0], 200)
 
 
 class BrowserTests(unittest.TestCase):

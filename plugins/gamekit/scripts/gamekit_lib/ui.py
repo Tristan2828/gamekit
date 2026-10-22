@@ -2,13 +2,16 @@
 
 The page (plugins/gamekit/ui/index.html) asks this server for JSON and the server does the same work
 as the CLI commands. Every request reads assets.yaml again, so edits made by hand or by Claude show
-up on the next refresh. One action runs at a time (ACTION); reading state never waits for it.
+up on the next refresh (GETs parse it only when its text changed: ManifestCache). One action runs at a time
+(ACTION; the next waits up to ACTION_WAIT seconds); reading state never waits for it. Images with ?v= in
+their URL are cached by the browser for good, and previews and thumbnails are kept in memory here.
 
 Adding a tab later (for example an AI generator): a section in index.html plus a handler in GET or POST below.
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import mimetypes
@@ -65,7 +68,7 @@ def file_url(root: Path, path: Path) -> str | None:
         rel = path.resolve().relative_to(root.resolve())
     except ValueError:
         return None
-    version = int(path.stat().st_mtime) if path.exists() else 0
+    version = path.stat().st_mtime_ns if path.exists() else 0  # exact: the browser keeps each version for good
     return "/file/" + quote(rel.as_posix()) + f"?v={version}"
 
 
@@ -1034,20 +1037,121 @@ READ_ONLY = {"/api/info", "/api/sfx/takes", "/api/validate", "/api/job", "/api/c
 
 # --- the server ------------------------------------------------------------------------------------
 
+# A URL with ?v=<modified time> names one version of a file: the browser may keep it for good (a new file gets a new v).
+IMMUTABLE = "max-age=31536000, immutable"
+# The browser stopped waiting (a thumbnail scrolled away, the page reloaded or closed): nothing to answer, nothing to print.
+GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+THUMB_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+ACTION_WAIT = 10  # seconds an action waits for the one before it (quick status clicks) before answering "still busy"
+
+
+class ManifestCache:
+    """assets.yaml loaded once per version of its text: parsing takes ~80 ms, and a tab of thumbnails asks for it
+    a few hundred times. For reading only (GET); actions load their own fresh copy."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.lock = threading.Lock()
+        self.text = b""
+        self.loaded: manifest.Manifest | None = None
+
+    def get(self) -> manifest.Manifest:
+        with self.lock:  # one parse at a time: the other requests wait for it instead of parsing too
+            try:
+                text = self.path.read_bytes()
+            except OSError:
+                text = b""
+            if self.loaded is None or text != self.text:
+                self.loaded = manifest.load(self.path)  # a clear error if it's gone or broken
+                self.text = text
+            return self.loaded
+
+
+class Recent:
+    """A small memory cache of finished images; forgets everything when full (the page asks for the same few hundred)."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.items: dict[tuple, tuple[bytes, str]] = {}
+
+    def get(self, key: tuple) -> tuple[bytes, str] | None:
+        return self.items.get(key)
+
+    def put(self, key: tuple, value: tuple[bytes, str]) -> None:
+        if len(self.items) >= self.limit:
+            self.items.clear()
+        self.items[key] = value
+
+
+def _mtime(path: Path) -> int:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
+def preview_key(loaded: manifest.Manifest, a: manifest.Asset, draft: bool) -> tuple:
+    """Everything an asset's preview is drawn from, with modified times: when one changes, it's drawn again."""
+    paths = [loaded.asset_path(a), *(path for _, _, path in loaded.frame_paths(a))]
+    src = loaded.source_path(a)
+    if draft and src is not None:
+        paths.append(src)
+    paths += [loaded.root / name for name in (loaded.code_art, loaded.palette) if name]
+    return (a.id, draft, repr(a), tuple((str(p), _mtime(p)) for p in paths))
+
+
+def pin_previews(loaded: manifest.Manifest, data: dict) -> dict:
+    """Adds &k=<everything it's drawn from> to the state's preview links. ?v= is only the time of the asset's own
+    file, but a sheet of frame files or the game's code art can change without it; with k the link changes too, so
+    the browser can keep every preview for good."""
+    by_id = {a.id: a for a in loaded.assets}
+    for item in data["assets"]:
+        a = by_id.get(item["id"])
+        for field, draft in (("preview", False), ("draft", True)):
+            if a is not None and item.get(field):
+                key = repr(preview_key(loaded, a, draft)).encode("utf-8")
+                item[field] += "&k=" + hashlib.sha1(key).hexdigest()[:16]
+    return data
+
+
+def thumbnail(path: Path, width: int) -> tuple[bytes, str]:
+    """An image at most `width` wide: big pictures shrink smoothly (JPEG unless see-through), small pixel images keep
+    hard pixels; images already that small are sent as they are (the page enlarges them, crisp)."""
+    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    with Image.open(path) as image:
+        if image.width <= width:
+            return path.read_bytes(), content_type
+        clear = image.mode in ("RGBA", "LA", "PA") or "transparency" in image.info
+        small = image.convert("RGBA" if clear else "RGB").resize(
+            (width, max(1, round(image.height * width / image.width))),
+            Image.Resampling.LANCZOS if image.width >= 256 else Image.Resampling.NEAREST)
+    buffer = io.BytesIO()
+    if clear:
+        small.save(buffer, "PNG")
+        return buffer.getvalue(), "image/png"
+    small.save(buffer, "JPEG", quality=88)
+    return buffer.getvalue(), "image/jpeg"
+
+
 def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
     busy = {"what": ""}
+    manifests = ManifestCache(manifest_path)
+    previews, thumbs = Recent(2000), Recent(600)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:  # keep the console quiet
             pass
 
-        def _send(self, code: int, body: bytes, content_type: str) -> None:
-            self.send_response(code)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
+        def _send(self, code: int, body: bytes, content_type: str, cache: str = "no-store") -> None:
+            try:
+                self.send_response(code)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", cache)
+                self.end_headers()
+                self.wfile.write(body)
+            except GONE:
+                self.close_connection = True
 
         def _json(self, code: int, data: dict) -> None:
             self._send(code, json.dumps(data).encode("utf-8"), "application/json")
@@ -1064,15 +1168,21 @@ def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
             if not self._local_only():
                 return
             url = urlparse(self.path)
+            query = parse_qs(url.query)
+            cache = IMMUTABLE if "v" in query else "no-store"
             try:
                 if url.path == "/":
                     self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
                 elif url.path == "/api/state":
-                    self._json(200, state(manifest.load(manifest_path)) | {"busy": busy["what"]})
+                    loaded = manifests.get()
+                    self._json(200, pin_previews(loaded, state(loaded)) | {"busy": busy["what"]})
                 elif url.path.startswith("/file/"):
-                    self._file(unquote(url.path[len("/file/"):]))
-                elif url.path.startswith("/preview/"):
-                    self._preview(unquote(url.path[len("/preview/"):]), "draft" in parse_qs(url.query))
+                    self._file(unquote(url.path[len("/file/"):]), cache)
+                elif url.path.startswith("/thumb/"):
+                    self._thumb(unquote(url.path[len("/thumb/"):]), query.get("w", ["320"])[0], cache)
+                elif url.path.startswith("/preview/"):  # kept for good only with k (pin_previews): v alone can miss changes
+                    self._preview(unquote(url.path[len("/preview/"):]), "draft" in query,
+                                  IMMUTABLE if "k" in query else "no-store")
                 else:
                     self._json(404, {"error": "not found"})
             except (UserError, *KNOWN_ERRORS) as error:
@@ -1081,29 +1191,56 @@ def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
                 traceback.print_exc()
                 self._json(500, {"error": f"{type(error).__name__}: {error}"})
 
-        def _file(self, rel: str) -> None:
+        def _game_file(self, rel: str) -> Path | None:
+            """A file inside the game folder (never outside it, whatever the path says), or None."""
             root = manifest_path.parent.resolve()
             path = (root / rel).resolve()
-            if not path.is_relative_to(root) or not path.is_file():
+            return path if path.is_relative_to(root) and path.is_file() else None
+
+        def _file(self, rel: str, cache: str) -> None:
+            path = self._game_file(rel)
+            if path is None:
                 self._json(404, {"error": "not found"})
                 return
             content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-            self._send(200, path.read_bytes(), content_type)
+            self._send(200, path.read_bytes(), content_type, cache)
 
-        def _preview(self, asset_id: str, draft: bool = False) -> None:
-            loaded = manifest.load(manifest_path)
-            asset = find(loaded, asset_id)
-            if draft:  # the text sprite drawn in memory: nothing is written
-                image = pipeline.draft_image(loaded, asset)
-            else:
-                items = pipeline.preview_items(loaded, [asset])
-                image = items[0][1] if items else codeart.render(loaded, asset)  # a file wins over code art
-            if image is None:
-                self._json(404, {"error": "no image yet"})
+        def _thumb(self, rel: str, width: str, cache: str) -> None:
+            """/thumb/<file in the game>?w=320&v=...: a picture shrunk for a tile (the full size is for zooming in)."""
+            path = self._game_file(rel)
+            if path is None or path.suffix.lower() not in THUMB_TYPES:
+                self._json(404, {"error": "not found"})
                 return
-            buffer = io.BytesIO()
-            image.save(buffer, format="PNG")
-            self._send(200, buffer.getvalue(), "image/png")
+            try:
+                w = max(32, min(2048, int(width)))
+            except ValueError:
+                raise UserError("w must be a whole number of pixels") from None
+            key = (str(path), _mtime(path), w)
+            found = thumbs.get(key)
+            if found is None:
+                found = thumbnail(path, w)
+                thumbs.put(key, found)
+            self._send(200, found[0], found[1], cache)
+
+        def _preview(self, asset_id: str, draft: bool, cache: str) -> None:
+            loaded = manifests.get()
+            asset = find(loaded, asset_id)
+            key = preview_key(loaded, asset, draft)  # drawn once per version of its files, then kept in memory
+            found = previews.get(key)
+            if found is None:
+                if draft:  # the text sprite drawn in memory: nothing is written
+                    image = pipeline.draft_image(loaded, asset)
+                else:
+                    items = pipeline.preview_items(loaded, [asset])
+                    image = items[0][1] if items else codeart.render(loaded, asset)  # a file wins over code art
+                if image is None:
+                    self._json(404, {"error": "no image yet"})
+                    return
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+                found = (buffer.getvalue(), "image/png")
+                previews.put(key, found)
+            self._send(200, found[0], found[1], cache)
 
         def do_POST(self) -> None:
             if not self._local_only():
@@ -1112,7 +1249,13 @@ def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
                 self._json(403, {"error": "missing X-Gamekit header"})
                 return
             url = urlparse(self.path)
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0:
+                self._json(400, {"error": "bad Content-Length"})
+                return
             if length > MAX_UPLOAD:
                 self._json(413, {"error": "file too big"})
                 return
@@ -1127,15 +1270,16 @@ def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
                 return
             try:
                 body = json.loads(data or b"{}")
-                if not isinstance(body, dict):
-                    raise UserError("expected a JSON object")
-            except json.JSONDecodeError:
+            except ValueError:  # not JSON, or not even text
                 self._json(400, {"error": "bad JSON"})
+                return
+            if not isinstance(body, dict):
+                self._json(400, {"error": "expected a JSON object, like {\"id\": \"hero\"}"})
                 return
             if url.path in READ_ONLY:
                 self._run(handler, body)
                 return
-            if not ACTION.acquire(blocking=False):
+            if not ACTION.acquire(timeout=ACTION_WAIT):  # the one before is still working: wait for it a little
                 self._json(409, {"error": f"still busy: {busy['what']}"})
                 return
             try:
@@ -1161,6 +1305,11 @@ class PageServer(ThreadingHTTPServer):
     # The default queue (5) makes Windows refuse connections when a tab asks for
     # hundreds of thumbnails at once (the Packs grid), so some images never load.
     request_queue_size = 256
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        if isinstance(sys.exc_info()[1], GONE):  # the browser hung up mid-request: not a problem worth a traceback
+            return
+        super().handle_error(request, client_address)  # type: ignore[arg-type]
 
 
 def make_server(manifest_path: Path, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
