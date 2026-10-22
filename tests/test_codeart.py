@@ -142,13 +142,21 @@ class SeedTests(unittest.TestCase):
     def test_seeded_sprite_draws_like_the_code(self) -> None:
         text, warnings = codeart.seed_text(self.m, self.by_id["blob"], pipeline.palette_entries(self.m))
         self.assertEqual(warnings, [])
-        self.assertIn('"w": ffffff', text)
-        self.assertIn('"k": k', text)  # same color as the palette's k
+        self.assertIn('"w": \'ffffff\'', text)
+        self.assertIn('"k": \'k\'', text)  # same color as the palette's k
         (self.root / "art").mkdir()
         (self.root / "art" / "blob.yaml").write_text(text, encoding="utf-8")
         draft = pipeline.draft_image(self.m, self.by_id["blob"])
         self.assertEqual(list(draft.getdata()), list(codeart.render(self.m, self.by_id["blob"]).getdata()))
         self.assertFalse((self.root / "assets").exists())  # nothing written into the game
+
+    def test_black_stays_a_color(self) -> None:
+        (self.root / "palette.hex").write_text("111111 k\nf0f0f0 w\n", encoding="utf-8")
+        text, _ = codeart.seed_text(self.m, self.by_id["hero"], pipeline.palette_entries(self.m))
+        self.assertIn("\"k\": '000000'", text)  # unquoted, YAML would read 000000 as palette index 0
+        (self.root / "art").mkdir()
+        (self.root / "art" / "hero.yaml").write_text(text, encoding="utf-8")
+        self.assertEqual(pipeline.draft_image(self.m, self.by_id["hero"]).getpixel((0, 0)), (0, 0, 0, 255))
 
     def test_missing_frames_copy_the_one_before(self) -> None:
         text, warnings = codeart.seed_text(self.m, self.by_id["blob2"], [])

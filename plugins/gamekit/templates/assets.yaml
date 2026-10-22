@@ -6,8 +6,9 @@
 #   source    claude | self | pack | library | sfxr | synth | commission | ai (local AI model: gamekit engines)
 #   status    todo | draft | done | keep   (keep: the game's own code-made version stays, by choice;
 #             counts as finished, needs no file)
-#   file      path inside `output` (.png for images, .wav for sfx and voice, .ogg for music)
-#   size      [width, height] in pixels (images only; one frame for sprites)
+#   file      path inside `output` (.png for images, .wav for sfx and voice, .ogg for music,
+#             .png / .ttf / .otf for fonts)
+#   size      [width, height] in pixels (images; one frame for sprites; optional glyph size for a font)
 #   frames    animation name -> frame count, e.g. {idle: 4, walk: 6} (sprites only)
 #   replaces  optional: what this replaces in the game today (sprite / sound name)
 #   src       optional: editable source file; default art/<id>.yaml (claude), art/<id>.aseprite (self),

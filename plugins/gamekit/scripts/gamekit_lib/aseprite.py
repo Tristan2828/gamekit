@@ -64,7 +64,7 @@ def export(source: Path, out_png: Path, exe: str | None = None) -> dict | None:
     with tempfile.TemporaryDirectory() as tmp:
         data_path = Path(tmp) / "sheet.json"
         result = subprocess.run(export_command(exe, source, out_png, data_path),
-                                stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode != 0 or not data_path.exists():
             raise AsepriteError(f"Aseprite failed on {source}: {(result.stderr or result.stdout).strip()}")
         raw = json.loads(data_path.read_text(encoding="utf-8"))

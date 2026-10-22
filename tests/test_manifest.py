@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugins" / "gamekit" / "scripts"))
 
-from gamekit_lib import credits, manifest  # noqa: E402
+from gamekit_lib import credits, manifest, ui  # noqa: E402
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "plugins" / "gamekit" / "templates" / "assets.yaml"
 
@@ -100,6 +100,59 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("1 asset drawn by Claude", text)
         self.assertNotIn("rock", text)
 
+
+
+class BadValueTests(unittest.TestCase):
+    """Mistakes in assets.yaml load and get explained by validate, instead of crashing every tool."""
+
+    def test_bad_values_load_and_are_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path = folder / "assets.yaml"
+            path.write_text(
+                "game: T\nframe_files: \"true\"\nframe_file: true\n"
+                "audio: {sfx_peak_db: \"-3 dB\"}\nsprites: {reserved_colors: \"#FF00FF\"}\nassets:\n"
+                "  - {id: hero, kind: sprite, source: pack, status: draft, file: hero.png, size: [8, 8],"
+                " frames: {idle: \"2\"}, license: CC0, src: /abs/hero.aseprite, licence: CC0}\n",
+                encoding="utf-8")
+            loaded = manifest.load(path)
+            self.assertEqual(loaded.sfx_peak_db, -1.0)
+            self.assertEqual(loaded.reserved_colors, [])
+            self.assertEqual(loaded.assets[0].frame_count(), 0)
+            problems = "\n".join(manifest.validate(loaded, check_files=False))
+            for expected in ("unknown setting 'frame_file'", "frame_files: true or false", "audio.sfx_peak_db",
+                             "sprites.reserved_colors", "unknown keys licence", "license must be",
+                             "src must be a path inside", "frames must map"):
+                self.assertIn(expected, problems)
+            self.assertIn("problems", ui.state(loaded))  # the page loads and can show them
+
+    def test_font_may_give_a_glyph_size(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_manifest(Path(tmp), "  - {id: font, kind: font, source: claude, file: f.png, size: [5, 7]}\n"
+                                             "  - {id: font2, kind: font, source: claude, file: f.ttf}\n")
+            self.assertEqual(manifest.validate(manifest.load(path), check_files=False), [])
+
+
+class SetFieldsTests(unittest.TestCase):
+    def test_notes_mentioning_an_id_are_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_manifest(Path(tmp),
+                                  "  - {id: bat_swarm, kind: sprite, source: claude, file: s.png, size: [8, 8],"
+                                  " notes: 'many of id: bat, flying together'}\n"
+                                  "  - {id: bat, kind: sprite, source: claude, file: b.png, size: [8, 8]}\n")
+            manifest.set_fields(path, "bat", {"source": "ai"})
+            sources = {a.id: a.source for a in manifest.load(path).assets}
+            self.assertEqual(sources, {"bat_swarm": "claude", "bat": "ai"})
+
+    def test_refuses_a_change_that_would_touch_another_field(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            # the only status: text is inside the notes, before any real status key
+            path = write_manifest(Path(tmp), "  - {id: bat, kind: sprite, notes: 'status: odd', source: claude,"
+                                             " file: b.png, size: [8, 8]}\n")
+            before = path.read_text(encoding="utf-8")
+            with self.assertRaises(manifest.ManifestError):
+                manifest.set_fields(path, "bat", {"status": "draft"})
+            self.assertEqual(path.read_text(encoding="utf-8"), before)
 
 if __name__ == "__main__":
     unittest.main()

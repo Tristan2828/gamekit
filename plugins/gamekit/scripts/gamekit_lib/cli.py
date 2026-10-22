@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
             packs.PackError, audio.AudioError, music.MusicError, ui.UserError, engines.EngineError,
-            pictures.PictureError, touchup.TouchUpError, codeart.CodeArtError) as error:
+            pictures.PictureError, touchup.TouchUpError, codeart.CodeArtError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -703,7 +703,10 @@ def _sfx_variants(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
         raise audio.AudioError(f"{src} not found: give --preset, or start one with `sfx new`")
     base = sfxr.load(src) if not args.preset else None
     folder = src.parent / "variants"
-    for n in range(1, max(1, args.count) + 1):
+    # numbered after the takes already there (the page's too), so none is overwritten
+    first = max((ui.take_number(p, asset.id) for p in folder.glob(f"{asset.id}_*.yaml")), default=0) + 1 \
+        if folder.exists() else 1
+    for n in range(first, first + max(1, args.count)):
         if args.preset:
             params = sfxr.preset(args.preset, n)
         else:
@@ -921,10 +924,11 @@ def _picture_frames(args: argparse.Namespace) -> int:
         if not name:
             raise pictures.PictureError(f"{item!r}: write <frame>=<picture>, e.g. {asset.id}_walk_1=walk.png")
         chosen[frame] = name
+    changes, note = packs.picture_source(loaded, list(chosen.values()))
     problems = pictures.use_frames(loaded, asset, chosen, background=not args.keep_background,
                                    snap=not args.no_palette, outline=not args.no_outline)
-    manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
-    print(f"{asset.id}: wrote {', '.join(chosen)} (one shared crop; source: ai)")
+    manifest.set_fields(loaded.path, asset.id, changes | ({"status": "draft"} if asset.status == "todo" else {}))
+    print(f"{asset.id}: wrote {', '.join(chosen)} (one shared crop; source: {changes['source']}){note}")
     for problem in problems:
         print(f"  - {problem}")
     return 0
@@ -936,7 +940,7 @@ def _touchup(args: argparse.Namespace) -> int:
     chosen = {}
     for item in args.pictures:
         frame, _, name = item.partition("=")
-        chosen[frame if name else asset.id] = name or frame
+        chosen[frame if name else pictures.frame_targets(loaded, asset)[0]] = name or frame
     if not loaded.frame_paths(asset):
         chosen = {asset.id: next(iter(chosen.values()))}
     saved = touchup.drafts(loaded, asset, chosen, not args.keep_background, not args.no_palette,
@@ -961,10 +965,12 @@ def _picture_use(args: argparse.Namespace) -> int:
     target = {path.stem: path for _, _, path in loaded.frame_paths(asset)}.get(args.frame, loaded.asset_path(asset))
     if target.exists() and not args.force:
         raise pictures.PictureError(f"{target} already exists; add --force to replace it")
+    changes, note = packs.picture_source(loaded, [args.picture])
     problems = pictures.use_as_asset(loaded, asset, args.picture, background=not args.keep_background,
                                      snap=not args.no_palette, outline=not args.no_outline, frame=args.frame)
-    manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
-    print(f"{args.frame or asset.id}: {args.picture} -> {target.relative_to(loaded.root).as_posix()} (source: ai)")
+    manifest.set_fields(loaded.path, asset.id, changes | ({"status": "draft"} if asset.status == "todo" else {}))
+    print(f"{args.frame or asset.id}: {args.picture} -> {target.relative_to(loaded.root).as_posix()} "
+          f"(source: {changes['source']}){note}")
     for problem in problems:
         print(f"  - {problem}")
     return 0

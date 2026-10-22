@@ -93,7 +93,8 @@ def asset_json(loaded: manifest.Manifest, a: manifest.Asset) -> dict:
         "url": file_url(loaded.root, path) if exists and not is_image else None,
         "preview": preview, "from_code": from_code,
         "draft": draft, "draft_waiting": bool(draft_at and (not exists or draft_at > path.stat().st_mtime)),
-        "src": src.relative_to(loaded.root).as_posix() if src is not None else None,
+        "src": (src.relative_to(loaded.root).as_posix() if src.is_relative_to(loaded.root) else str(src))
+               if src is not None else None,
         "src_exists": bool(src and src.exists()),
         "license": lic,
         "targets": pictures.frame_targets(loaded, a) if is_image else [],
@@ -204,7 +205,7 @@ def make_takes(loaded: manifest.Manifest, a: manifest.Asset, preset: str = "", c
     folder = takes_dir(loaded, a)
     if base_take:
         base_path = folder / f"{base_take}.yaml"
-        if not take_number(base_path, a.id) or not base_path.exists():
+        if not re.fullmatch(re.escape(a.id) + r"_\d+", base_take) or not base_path.exists():
             raise UserError(f"no take called {base_take}")
     else:
         base_path = src
@@ -237,7 +238,7 @@ def make_takes(loaded: manifest.Manifest, a: manifest.Asset, preset: str = "", c
 def keep_take(loaded: manifest.Manifest, a: manifest.Asset, take: str) -> list[str]:
     """Makes a take the asset's sound: its parameters become sounds/<id>.yaml and the WAV is rendered."""
     path = takes_dir(loaded, a) / f"{take}.yaml"
-    if not take_number(path, a.id) or not path.exists():
+    if not re.fullmatch(re.escape(a.id) + r"_\d+", take) or not path.exists():
         raise UserError(f"no take called {take}")
     params = sfxr.load(path)
     sfxr.save(pipeline.sfx_source(loaded, a), params, "")
@@ -262,7 +263,7 @@ def clear_takes(loaded: manifest.Manifest, a: manifest.Asset) -> int:
 
 def upload_path(name: str) -> Path:
     """An uploaded file by the name the server gave it; only plain names inside UPLOADS."""
-    if not name or "/" in name or "\\" in name or name.startswith("."):
+    if not name or "/" in name or "\\" in name or ":" in name or name.startswith("."):
         raise UserError("unknown upload")
     path = UPLOADS / name
     if not path.is_file():
@@ -634,10 +635,10 @@ def do_animation_use(loaded: manifest.Manifest, body: dict) -> dict:
     paths = {path.stem: path for _, _, path in loaded.frame_paths(a)}
     if any(paths.get(frame) and paths[frame].exists() for frame in chosen):
         _overwrite_guard(next(paths[f] for f in chosen if paths.get(f) and paths[f].exists()), body)
+    changes, note = packs.picture_source(loaded, list(chosen.values()))  # before writing: two packs are refused
     problems = pictures.use_frames(loaded, a, chosen, background=bool(body.get("background", True)),
                                    snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)))
-    changes, note = _picture_source(loaded, list(chosen.values()))
-    manifest.set_fields(loaded.path, a.id, changes | ({"status": "draft"} if a.status == "todo" else {}))
+    note += _record_use(loaded, a, changes)
     return {"problems": problems,
             "message": f"{a.id}: saved {len(chosen)} frame{'s' if len(chosen) != 1 else ''} (source: {changes['source']}){note}"}
 
@@ -701,33 +702,24 @@ def do_use_picture(loaded: manifest.Manifest, body: dict) -> dict:
     frame = str(body.get("frame") or "")
     frames = {path.stem: path for _, _, path in loaded.frame_paths(a)}
     _overwrite_guard(frames.get(frame, loaded.asset_path(a)), body)
+    changes, note = packs.picture_source(loaded, [str(body.get("name", ""))])
     problems = pictures.use_as_asset(loaded, a, str(body.get("name", "")), background=bool(body.get("background", True)),
                                      snap=bool(body.get("snap", True)), outline=bool(body.get("outline", True)),
                                      frame=frame)
-    changes, note = _picture_source(loaded, [str(body.get("name", ""))])
-    manifest.set_fields(loaded.path, a.id, changes | ({"status": "draft"} if a.status == "todo" else {}))
+    note += _record_use(loaded, a, changes)
     return {"problems": problems, "message": f"{frame or a.id} now uses {body.get('name')} (source: {changes['source']}){note}"}
 
 
-def _picture_source(loaded: manifest.Manifest, names: list[str]) -> tuple[dict[str, str], str]:
-    """Where used pictures' art comes from, for assets.yaml: pictures copied from one pack are that pack's art
-    (source: pack, its license); anything else is AI art. AI art worked from pack art gets a note naming the
-    packs whose licenses ask for something, so the user can check (CC0 needs nothing)."""
-    metas = [pictures.read_meta(pictures.path_of(loaded, name)) for name in names]
-    own = {str(m.get("pack") or "") for m in metas}
-    if len(own) == 1 and "" not in own:
-        return {"source": "pack", "license": "{pack: " + own.pop() + "}"}, ""
-    used = sorted({p for m in metas for p in pictures.packs_of(m)})
-    check = []
-    for name in used:
-        try:
-            lic = packs.load(loaded.root, name).license.get("name", "")
-        except packs.PackError:
-            lic = ""
-        if not re.search(r"\bCC0\b|public domain", lic, re.I):
-            check.append(f"{name} ({lic or 'license not set'})")
-    note = f". Made from pack art: check that {', '.join(check)} allows that, and credit it if asked" if check else ""
-    return {"source": "ai"}, note
+def _record_use(loaded: manifest.Manifest, a: manifest.Asset, changes: dict[str, str]) -> str:
+    """Writes source / license (and todo -> draft) after a file went into the game. The file is already saved,
+    so a manifest that can't be changed safely becomes a note saying what to write by hand, not an error."""
+    changes = changes | ({"status": "draft"} if a.status == "todo" else {})
+    try:
+        manifest.set_fields(loaded.path, a.id, changes)
+    except manifest.ManifestError as error:
+        wanted = ", ".join(f"{k}: {v}" for k, v in changes.items())
+        return f". The file is saved, but {error}: set {wanted} for {a.id} in {loaded.path.name}"
+    return ""
 
 
 def do_preview_picture(loaded: manifest.Manifest, body: dict) -> dict:
@@ -831,9 +823,8 @@ def do_pack_use(loaded: manifest.Manifest, body: dict) -> dict:
     _overwrite_guard(frames.get(frame, loaded.asset_path(a)), body)
     _, sprite = _pack_sprite(loaded, body)
     problems = pictures.save_as_asset(loaded, a, sprite, frame)
-    changes = {"source": "pack", "license": "{pack: " + pack.name + "}"}
-    manifest.set_fields(loaded.path, a.id, changes | ({"status": "draft"} if a.status == "todo" else {}))
-    return {"problems": problems, "message": f"{frame} now uses {pack.name}: {body.get('file')} (source: pack)"}
+    note = _record_use(loaded, a, {"source": "pack", "license": "{pack: " + pack.name + "}"})
+    return {"problems": problems, "message": f"{frame} now uses {pack.name}: {body.get('file')} (source: pack){note}"}
 
 
 def do_pack_to_picture(loaded: manifest.Manifest, body: dict) -> dict:
@@ -1237,6 +1228,8 @@ def open_window(url: str) -> None:
 
 
 def serve(manifest_path: Path, port: int = DEFAULT_PORT, window: bool = True) -> None:
+    global UPLOADS
+    UPLOADS = Path(tempfile.mkdtemp(prefix="gamekit-uploads-"))  # this page's own: another game's page may be open
     server = make_server(manifest_path, port)
     url = f"http://127.0.0.1:{server.server_address[1]}"
     if window:
@@ -1258,6 +1251,7 @@ def write_launcher(manifest_path: Path, gamekit_script: Path) -> Path:
     bat = manifest_path.resolve().parent / "Start Gamekit.bat"
     bat.write_text(
         "@echo off\r\n"
+        "chcp 65001 >nul\r\n"  # read the paths below as UTF-8 (e.g. C:\\Users\\José)
         "REM Opens gamekit's asset page for this game. Leave this window open while you use it; close it to quit.\r\n"
         "REM Made by `gamekit ui --launcher`; run that again if gamekit moves.\r\n"
         "title Gamekit\r\n"

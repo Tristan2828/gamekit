@@ -46,7 +46,7 @@ def new_path(manifest: Manifest, kind: str, description: str, seed: int) -> Path
 def path_of(manifest: Manifest, kind: str, name: str) -> Path:
     """A take by file name (no folders), which must exist."""
     ext = KINDS[kind][1]
-    if not name or "/" in name or "\\" in name or name.startswith(".") or not name.endswith(ext):
+    if not name or "/" in name or "\\" in name or ":" in name or name.startswith(".") or not name.endswith(ext):
         raise MadeError(f"not a {kind} name: {name!r}")
     path = folder(manifest, kind) / name
     if not path.is_file():

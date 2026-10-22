@@ -190,7 +190,8 @@ def seed_text(manifest: Manifest, asset: Asset, entries: list[Entry]) -> tuple[s
              "# the game only changes when the owner presses Draw (or Use) on the asset page."]
     if any(char != value for char, value in used.items()):  # a keys block replaces the palette names: list all
         lines.append("keys:")
-        lines += [f"  {json.dumps(char)}: {value}" for char, value in sorted(used.items())]
+        # values quoted: YAML reads 000000 as the number 0 (a palette index)
+        lines += [f"  {json.dumps(char)}: '{value}'" for char, value in sorted(used.items())]
     still = len(names) == 1 and names[0][0] == "idle"
     if still:
         lines.append("rows: |")

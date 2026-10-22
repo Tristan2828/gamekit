@@ -127,7 +127,7 @@ def check(manifest: Manifest, asset: Asset, colors: list[Color]) -> list[str]:
                 problems.append(f"{asset.id}: {image.width}x{image.height} isn't a grid of {size[0]}x{size[1]} tiles")
         elif list(image.size) != size:
             problems.append(f"{asset.id}: image is {image.width}x{image.height}, manifest says {size[0]}x{size[1]}")
-        if asset.frames and sum(asset.frames.values()) > 1:
+        if asset.frames and asset.frame_count() > 1:
             problems.append(f"{asset.id}: manifest lists animation frames but there's no {path.with_suffix('.json').name}")
 
     if colors:

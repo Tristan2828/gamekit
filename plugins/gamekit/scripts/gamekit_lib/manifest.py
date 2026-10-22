@@ -56,11 +56,12 @@ class Asset:
     loop: bool | None = None
     license: dict[str, str] = field(default_factory=dict)
     notes: str = ""
+    unknown: list[str] = field(default_factory=list, compare=False)  # keys gamekit doesn't know (typos?)
 
     def frame_count(self) -> int:
         """Images to make: the animation frames, or 1 for a still image, 0 for audio."""
-        if self.frames:
-            return sum(self.frames.values())
+        if isinstance(self.frames, dict) and self.frames:
+            return sum(_count(n) for n in self.frames.values())
         _, has_pixels = KINDS.get(self.kind, (set(), False))
         return 1 if has_pixels else 0
 
@@ -77,15 +78,29 @@ class Manifest:
     audio: dict = field(default_factory=dict)
     code_art: str = ""
     sprites: dict = field(default_factory=dict)  # the game's sprite rules: prompt, outline, reserved_colors
+    load_problems: list[str] = field(default_factory=list)  # found while reading; validate reports them
+
+    @property
+    def outline(self) -> str | None:
+        """sprites.outline when it's a color (validate reports a bad one)."""
+        value = self.sprites.get("outline")
+        return value if isinstance(value, str) and HEX_PATTERN.match(value) else None
+
+    @property
+    def reserved_colors(self) -> list[str]:
+        """sprites.reserved_colors that are colors (validate reports bad ones)."""
+        value = self.sprites.get("reserved_colors") or []
+        return [c for c in value if isinstance(c, str) and HEX_PATTERN.match(c)] if isinstance(value, list) else []
 
     @property
     def sfx_peak_db(self) -> float:
-        return float(self.audio.get("sfx_peak_db", -1.0))
+        value = self.audio.get("sfx_peak_db", -1.0)
+        return float(value) if _number(value) else -1.0  # a bad value is reported by validate
 
     @property
     def music_lufs(self) -> float | None:
         value = self.audio.get("music_lufs")
-        return None if value is None else float(value)
+        return float(value) if _number(value) else None
 
     def frame_paths(self, asset: Asset) -> list[tuple[str, int, Path]]:
         """With `frame_files: true`, each animation frame is its own PNG next to the asset's file:
@@ -123,6 +138,15 @@ class Manifest:
         return self.root / default.format(id=asset.id) if default else None
 
 
+def _number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _count(value: object) -> int:
+    """A frame count as written, or 0 when it isn't a whole number (validate reports it)."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
 def frame_names(asset: Asset, stem: str) -> list[tuple[str, int, str]]:
     """(animation, index, name) per frame: idle frame 0 is `stem`, more idle frames `stem_1`, `stem_2`...;
     another animation's frames `stem_<anim>_1`, `_2`... (`stem_<anim>` when it has one frame).
@@ -130,7 +154,8 @@ def frame_names(asset: Asset, stem: str) -> list[tuple[str, int, str]]:
     frames = asset.frames if isinstance(asset.frames, dict) and asset.frames else {"idle": 1}
     names = []
     for anim, count in frames.items():
-        for i in range(int(count)):
+        count = _count(count)
+        for i in range(count):
             if anim == "idle":
                 name = stem if i == 0 else f"{stem}_{i}"
             elif count == 1:
@@ -160,6 +185,11 @@ def load(path: str | Path) -> Manifest:
         if not isinstance(raw, dict):
             raise ManifestError(f"{path}: assets[{i}] must be a mapping")
         assets.append(_asset_from_dict(raw))
+    known = {"game", "output", "palette", "assets", "music", "frame_files", "audio", "code_art", "sprites"}
+    load_problems = [f"unknown setting {key!r} (a typo? see the field reference in gamekit's templates/assets.yaml)"
+                     for key in data if key not in known]
+    if not isinstance(data.get("frame_files", False), bool):
+        load_problems.append(f"frame_files: true or false, got {data.get('frame_files')!r}")
     return Manifest(
         path=path,
         game=str(data.get("game", "")),
@@ -171,7 +201,11 @@ def load(path: str | Path) -> Manifest:
         audio=dict(data.get("audio") or {}) if isinstance(data.get("audio") or {}, dict) else {"_bad": True},
         code_art=str(data.get("code_art") or ""),
         sprites=dict(data.get("sprites") or {}) if isinstance(data.get("sprites") or {}, dict) else {"_bad": True},
+        load_problems=load_problems,
     )
+
+
+ASSET_KEYS = {"id", "kind", "source", "status", "file", "size", "frames", "replaces", "src", "loop", "license", "notes"}
 
 
 def _asset_from_dict(raw: dict) -> Asset:
@@ -188,8 +222,9 @@ def _asset_from_dict(raw: dict) -> Asset:
         replaces=str(raw.get("replaces", "") or ""),
         src=str(raw.get("src", "") or ""),
         loop=raw.get("loop"),
-        license=dict(raw.get("license") or {}),
+        license=dict(lic) if isinstance(lic := raw.get("license") or {}, dict) else {"_bad": str(lic)},
         notes=str(raw.get("notes", "") or ""),
+        unknown=[str(k) for k in raw if k not in ASSET_KEYS],
     )
 
 
@@ -221,7 +256,7 @@ def _sprite_rule_problems(rules: dict) -> list[str]:
 
 def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
     """Returns a list of problems; empty means the manifest is valid."""
-    problems: list[str] = []
+    problems: list[str] = list(manifest.load_problems)
     if manifest.music.get("_bad"):
         problems.append("music: must be a mapping (godot_project, render_script)")
     elif set(manifest.music) - {"godot_project", "render_script"}:
@@ -248,6 +283,13 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
             problems.append(f"{where}: duplicate id")
         seen.add(a.id)
 
+        if a.unknown:
+            problems.append(f"{where}: unknown keys {', '.join(a.unknown)} (typos? known: {', '.join(sorted(ASSET_KEYS))})")
+        if a.license.get("_bad"):
+            problems.append(f"{where}: license must be {{name, author, url}} or {{pack: <name>}}, "
+                            f"not {a.license['_bad']!r}")
+        if a.src and Path(a.src).is_absolute():
+            problems.append(f"{where}: src must be a path inside the game folder, not {a.src}")
         if a.kind not in KINDS:
             problems.append(f"{where}: kind must be one of {', '.join(KINDS)}")
             continue
@@ -261,14 +303,15 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
             problems.append(f"{where}: file is required (path inside '{manifest.output}/')")
         elif Path(a.file).suffix.lower() not in extensions:
             problems.append(f"{where}: a {a.kind} file must end in {' or '.join(sorted(extensions))}")
-        if needs_size:
-            if not (isinstance(a.size, list) and len(a.size) == 2
-                    and all(isinstance(n, int) and n > 0 for n in a.size)):
+        good_size = isinstance(a.size, list) and len(a.size) == 2 and all(
+            isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in a.size)
+        if needs_size or a.kind == "font" and a.size is not None:  # a pixel font may give its glyph size
+            if not good_size:
                 problems.append(f"{where}: size must be [width, height] in pixels")
         elif a.size is not None:
             problems.append(f"{where}: a {a.kind} has no pixel size")
         if not isinstance(a.frames, dict) or not all(
-                isinstance(k, str) and isinstance(v, int) and v > 0 for k, v in a.frames.items()):
+                isinstance(k, str) and _count(v) for k, v in a.frames.items()):
             problems.append(f"{where}: frames must map animation name -> frame count, e.g. {{walk: 4}}")
         elif a.frames and a.kind != "sprite":
             problems.append(f"{where}: only sprites have animation frames")
@@ -333,7 +376,10 @@ def set_fields(path: str | Path, asset_id: str, values: dict[str, str]) -> None:
     name = re.escape(asset_id)
     id_part = r"\bid:\s*[\"']?" + name + r"[\"']?"
     flow = re.compile(r"^\s*-\s*\{.*" + id_part + r"\s*[,}]")
+    flow_first = re.compile(r"^\s*-\s*\{\s*" + id_part + r"\s*[,}]")  # id as the first key: never inside notes
     block = re.compile(r"^(\s*)-\s+id:\s*[\"']?" + name + r"[\"']?\s*(#.*)?$")
+    if any(flow_first.match(line) for line in lines):
+        flow = flow_first
     for i, line in enumerate(lines):
         if flow.match(line):
             for key, value in values.items():
@@ -370,9 +416,14 @@ def set_fields(path: str | Path, asset_id: str, values: dict[str, str]) -> None:
     else:
         raise ManifestError(f"{asset_id!r} is not in {path.name}")
     changed = "".join(lines)
+    before = {a.id: a for a in _parse(text, path)}
     check = {a.id: a for a in _parse(changed, path)}
-    if asset_id not in check or any(_written(check[asset_id], k) != str(v) for k, v in values.items()):
-        # never write a file we can't read back the way we meant
+    others_same = check.keys() == before.keys() and all(
+        check[i] == a for i, a in before.items() if i != asset_id)
+    rest_same = asset_id in check and all(getattr(check[asset_id], f) == getattr(before[asset_id], f)
+                                          for f in vars(before[asset_id]) if f not in values)
+    if not others_same or not rest_same or any(_written(check[asset_id], k) != str(v) for k, v in values.items()):
+        # never write a file we can't read back the way we meant, or that changes anything else
         raise ManifestError(f"couldn't change {asset_id} safely; edit {path.name} by hand")
     path.write_bytes(changed.encode("utf-8"))
 

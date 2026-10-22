@@ -52,7 +52,7 @@ The field reference is the comment block at the top of `assets.yaml` (from
      effects, `library` for realistic sound effects, `synth` for music. Ask if unsure for a whole
      category rather than per asset.
    - `file`: `sprites/<id>.png`, `tilesets/<id>.png`, `icons/<id>.png`, `ui/<id>.png`,
-     `sfx/<id>.wav`, `music/<id>.ogg`.
+     `sfx/<id>.wav`, `voice/<id>.wav`, `music/<id>.ogg`, `fonts/<id>.png` (or `.ttf` / `.otf`).
    - Variants that are only a recolor or tint in the game (e.g. "champion" enemies) are **not**
      separate assets; note them on the base asset.
 4. **Validate** with `validate --no-files` until it reports no problems.
