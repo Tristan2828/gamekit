@@ -198,25 +198,41 @@ def off_palette(image: Image.Image, colors: list[Color]) -> tuple[dict[str, int]
     return counts, partial
 
 
-def preview(items: list[tuple[str, Image.Image]], scale: int = 4, columns: int = 6) -> Image.Image:
-    """A labelled contact sheet, scaled up with nearest-neighbor so pixels stay crisp."""
+def preview(items: list[tuple[str, Image.Image | None]], scale: int = 4, columns: int = 6,
+            background: Color | None = None) -> Image.Image:
+    """A labelled contact sheet, scaled up with nearest-neighbor so pixels stay crisp. Each row is as tall as
+    its tallest image and each cell as wide as its image or label, so small icons stay small next to big
+    sprites. Images sit on a checkerboard, or on `background` (e.g. the game's floor color). An item whose
+    image is None is an empty cell (e.g. "no draft yet")."""
     if not items:
-        raise ArtError("nothing to preview: no image assets have files yet")
+        raise ArtError("nothing to preview: none of these assets has a file, code art or draft yet")
     label_h = 12
     pad = 8
-    cell_w = max(max(img.width for _, img in items) * scale, 64) + pad
-    cell_h = max(img.height for _, img in items) * scale + label_h + pad
-    cols = min(columns, len(items))
-    rows = (len(items) + cols - 1) // cols
-    sheet = Image.new("RGBA", (cols * cell_w + pad, rows * cell_h + pad), (40, 36, 46, 255))
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    cells = []  # (label, image, width, height)
+    for name, img in items:
+        big = img.resize((img.width * scale, img.height * scale), Image.Resampling.NEAREST) if img else None
+        width = max(big.width if big else 2 * scale, round(measure.textlength(name)), 16)
+        cells.append((name, big, width, big.height if big else 0))
+    rows = [cells[i:i + columns] for i in range(0, len(cells), columns)]
+    row_heights = [max(max(c[3] for c in row), 4 * scale) + label_h + pad for row in rows]
+    sheet_w = max(sum(c[2] + pad for c in row) for row in rows) + pad
+    sheet = Image.new("RGBA", (sheet_w, sum(row_heights) + pad), (40, 36, 46, 255))
     draw = ImageDraw.Draw(sheet)
-    for i, (name, img) in enumerate(items):
-        x = pad + (i % cols) * cell_w
-        y = pad + (i // cols) * cell_h
-        big = img.resize((img.width * scale, img.height * scale), Image.Resampling.NEAREST)
-        _checker(draw, x, y, big.width, big.height)
-        sheet.alpha_composite(big, (x, y))
-        draw.text((x, y + big.height + 1), name[: max(4, cell_w // 6)], fill=(230, 225, 215, 255))
+    y = pad
+    for row, height in zip(rows, row_heights):
+        x = pad
+        for name, big, width, image_h in row:
+            top = y + height - label_h - pad - image_h  # bottom-aligned, so feet and icons line up
+            if big is not None:
+                if background is None:
+                    _checker(draw, x, top, big.width, big.height)
+                else:
+                    draw.rectangle([x, top, x + big.width - 1, top + big.height - 1], fill=(*background, 255))
+                sheet.alpha_composite(big, (x, top))
+            draw.text((x, y + height - label_h - pad + 1), name, fill=(230, 225, 215, 255))
+            x += width + pad
+        y += height
     return sheet
 
 

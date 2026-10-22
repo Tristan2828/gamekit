@@ -17,7 +17,7 @@ If there's no `assets.yaml`, use the `assets-plan` skill first.
 
 | Command | Does |
 |---|---|
-| `status` | Counts per kind: todo / draft / done, total assets and images |
+| `status` | Counts per kind: todo / draft / done / keep, total assets and images |
 | `status --todo` | Also lists every unfinished asset with size, frames, source and file |
 | `validate` | Checks the manifest, the palette file, and that every `done` asset's file exists |
 | `credits` | Writes `CREDITS.md` from the license info (third-party authors + what was made in-house) |
@@ -33,6 +33,8 @@ Edit `assets.yaml` directly, then run `validate`.
 - **A file arrived** (exported, downloaded, generated): set `status: draft` while it still needs
   cleanup or review in-game, `done` when the user is happy with it. `validate` fails if a `done`
   asset's file is missing from the output folder.
+- **The game keeps its own version** (the owner chose its code-drawn sprite or synth sound over a
+  new file): `status: keep`, with a note saying so. It counts as finished and needs no file or license.
 - **Downloaded or commissioned asset** (`source: pack`, `library`, `commission`): for an imported
   pack use `license: {pack: <name>}` (see the `pack-import` skill); otherwise fill
   `license: {name, author, url}` from the pack's license file or download page. Never guess a
@@ -43,5 +45,5 @@ Edit `assets.yaml` directly, then run `validate`.
 
 ## Reporting
 
-Lead with the percentage done and the counts table. Then list what blocks a release: assets still
+Lead with the percentage done (done + keep) and the counts table. Then list what blocks a release: assets still
 `todo`, `draft` assets, and any licensed asset missing license info.

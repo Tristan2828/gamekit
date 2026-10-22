@@ -78,6 +78,9 @@ def asset_json(loaded: manifest.Manifest, a: manifest.Asset) -> dict:
     from_code = bool(is_image and not exists and codeart.has_art(loaded, a))
     if from_code:  # no file yet: the game still draws it from its code, so show that
         preview = f"/preview/{quote(a.id)}?v={int((loaded.root / loaded.code_art).stat().st_mtime)}"
+    # Claude's text sprite (art/<id>.yaml) that isn't in the game yet: newer than the file, or no file at all
+    draft_at = src.stat().st_mtime if is_image and src and src.suffix.lower() in (".yaml", ".yml") and src.exists() else None
+    draft = f"/preview/{quote(a.id)}?draft=1&v={int(draft_at)}" if draft_at else None
     lic = a.license
     try:
         lic = manifest.effective_license(loaded, a) if a.license else {}
@@ -89,6 +92,7 @@ def asset_json(loaded: manifest.Manifest, a: manifest.Asset) -> dict:
         "replaces": a.replaces, "loop": loaded.loops(a), "exists": exists,
         "url": file_url(loaded.root, path) if exists and not is_image else None,
         "preview": preview, "from_code": from_code,
+        "draft": draft, "draft_waiting": bool(draft_at and (not exists or draft_at > path.stat().st_mtime)),
         "src": src.relative_to(loaded.root).as_posix() if src is not None else None,
         "src_exists": bool(src and src.exists()),
         "license": lic,
@@ -1077,7 +1081,7 @@ def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
                 elif url.path.startswith("/file/"):
                     self._file(unquote(url.path[len("/file/"):]))
                 elif url.path.startswith("/preview/"):
-                    self._preview(unquote(url.path[len("/preview/"):]))
+                    self._preview(unquote(url.path[len("/preview/"):]), "draft" in parse_qs(url.query))
                 else:
                     self._json(404, {"error": "not found"})
             except (UserError, *KNOWN_ERRORS) as error:
@@ -1095,11 +1099,14 @@ def make_handler(manifest_path: Path) -> type[BaseHTTPRequestHandler]:
             content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
             self._send(200, path.read_bytes(), content_type)
 
-        def _preview(self, asset_id: str) -> None:
+        def _preview(self, asset_id: str, draft: bool = False) -> None:
             loaded = manifest.load(manifest_path)
             asset = find(loaded, asset_id)
-            items = pipeline.preview_items(loaded, [asset])
-            image = items[0][1] if items else codeart.render(loaded, asset)  # a file wins over code art
+            if draft:  # the text sprite drawn in memory: nothing is written
+                image = pipeline.draft_image(loaded, asset)
+            else:
+                items = pipeline.preview_items(loaded, [asset])
+                image = items[0][1] if items else codeart.render(loaded, asset)  # a file wins over code art
             if image is None:
                 self._json(404, {"error": "no image yet"})
                 return

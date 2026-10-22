@@ -12,12 +12,14 @@ as magenta #FF00FF and #800080, the same convention as finished art files.
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 from PIL import Image
 
 from .manifest import Asset, Manifest, frame_names
+from .palette import Entry, keys as palette_keys, to_hex
 
 TINT = {"P": (255, 0, 255), "p": (128, 0, 128)}
 _cache: dict[Path, tuple[float, dict[str, tuple[int, int, int, int]], dict[str, list[str]]]] = {}
@@ -124,3 +126,80 @@ def render(manifest: Manifest, asset: Asset) -> Image.Image | None:
         for col, frame in enumerate(frames):  # bottom-centered, so feet line up
             sheet.paste(frame, (col * cell_w + (cell_w - frame.width) // 2, row * cell_h + cell_h - frame.height))
     return sheet
+
+
+def seed_text(manifest: Manifest, asset: Asset, entries: list[Entry]) -> tuple[str, list[str]]:
+    """A text sprite (art/<id>.yaml) holding the asset's code art, to redesign from; and warnings.
+
+    Characters keep their code meaning. When each is a palette name with the same color, the palette's names
+    are the keys; otherwise a `keys:` block lists every character (palette name, else RRGGBB). Fully transparent characters become ".". A frame the
+    code doesn't have is a copy of the frame before it (said in the warnings)."""
+    found = load(manifest)
+    if not found:
+        raise CodeArtError("assets.yaml has no `code_art` set")
+    palette, sprites = found
+    name = sprite_name(asset)
+    names = frame_names(asset, name)
+    if not any(n in sprites for _, _, n in names):
+        raise CodeArtError(f"{asset.id}: no sprite {name!r} in {manifest.code_art}")
+    by_name = palette_keys(entries)
+    warnings: list[str] = []
+    used: dict[str, str] = {}  # character -> its palette name, or RRGGBB when the palette has no match
+    faded: set[str] = set()
+
+    def convert(rows: list[str], where: str) -> list[str]:
+        out = []
+        for row in rows:
+            line = ""
+            for char in row:
+                rgba = (*TINT[char], 255) if char in TINT else palette.get(char)
+                if char == "." or rgba is not None and rgba[3] == 0:
+                    line += "."
+                elif rgba is None:
+                    raise CodeArtError(f"{where}: unknown character {char!r}")
+                else:
+                    if rgba[3] < 255 and char not in faded:
+                        faded.add(char)
+                        warnings.append(f"{asset.id}: {char!r} is see-through in the code; text sprites draw it solid")
+                    used[char] = char if by_name.get(char) == rgba[:3] else to_hex(rgba)
+                    line += char
+            out.append(line)
+        return out
+
+    frames: dict[str, list[list[str]]] = {}
+    previous: list[str] | None = None
+    for anim, _, frame in names:
+        if frame in sprites:
+            previous = convert(sprites[frame], frame)
+        elif previous is None:
+            first = next(n for _, _, n in names if n in sprites)
+            previous = convert(sprites[first], first)
+            warnings.append(f"{asset.id}: the code has no {frame}; it starts as a copy of {first}")
+        else:
+            warnings.append(f"{asset.id}: the code has no {frame}; it starts as a copy of the frame before")
+        frames.setdefault(anim, []).append(previous)
+    size = asset.size if isinstance(asset.size, list) and len(asset.size) == 2 else None
+    for anim, rows_list in frames.items():
+        for rows in rows_list:
+            if size and [max(len(r) for r in rows), len(rows)] != size:
+                warnings.append(f"{asset.id}: the code's {anim} frame is {max(len(r) for r in rows)}x{len(rows)}, "
+                                f"assets.yaml says {size[0]}x{size[1]}")
+                break
+
+    lines = [f"# {asset.id}: seeded from {manifest.code_art} ({name}) by `gamekit seed`. Redesign it here;",
+             "# the game only changes when the owner presses Draw (or Use) on the asset page."]
+    if any(char != value for char, value in used.items()):  # a keys block replaces the palette names: list all
+        lines.append("keys:")
+        lines += [f"  {json.dumps(char)}: {value}" for char, value in sorted(used.items())]
+    still = len(names) == 1 and names[0][0] == "idle"
+    if still:
+        lines.append("rows: |")
+        lines += ["  " + r for r in frames["idle"][0]]
+    else:
+        lines.append("frames:")
+        for anim, rows_list in frames.items():
+            lines.append(f"  {anim}:")
+            for rows in rows_list:
+                lines.append("    - |")
+                lines += ["      " + r for r in rows]
+    return "\n".join(lines) + "\n", warnings

@@ -128,7 +128,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(code, 200)
         data = json.loads(body)
         self.assertEqual([a["id"] for a in data["assets"]], ["hero", "hit"])
-        self.assertEqual(data["counts"], {"todo": 2, "draft": 0, "done": 0})
+        self.assertEqual(data["counts"], {"todo": 2, "draft": 0, "done": 0, "keep": 0})
         plugin = json.loads(ui.PLUGIN_JSON.read_text(encoding="utf-8"))
         self.assertEqual(data["version"], plugin["version"])
         self.assertEqual(self.get("/")[0], 200)
@@ -196,10 +196,16 @@ class ServerTests(unittest.TestCase):
         (art / "hero.yaml").write_text("frames:\n  idle:\n" + frame * 2 + "  walk:\n" + frame * 4, encoding="utf-8")
         text = (self.root / "assets.yaml").read_text(encoding="utf-8").replace("size: [16, 16]", "size: [8, 16]")
         (self.root / "assets.yaml").write_text(text, encoding="utf-8")
+        hero = json.loads(self.get("/api/state")[1])["assets"][0]
+        self.assertTrue(hero["draft_waiting"])  # Claude's text sprite isn't in the game yet
+        code, png = self.get(hero["draft"])
+        self.assertEqual((code, png[:4]), (200, b"\x89PNG"))
+        self.assertFalse((self.root / "assets" / "art" / "hero.png").exists())  # showing a draft writes nothing
         code, data = self.post("/api/art/draw", {"id": "hero"})
         self.assertEqual(code, 200, data)
         hero = json.loads(self.get("/api/state")[1])["assets"][0]
         self.assertEqual(hero["status"], "draft")
+        self.assertFalse(hero["draft_waiting"])
         code, png = self.get(hero["preview"])
         self.assertEqual((code, png[:4]), (200, b"\x89PNG"))
 

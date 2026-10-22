@@ -83,13 +83,14 @@
   .thumb.none { border: 2px dashed var(--line); background: none; color: var(--dim); font-size: 11px; text-align: center; }
   .pill { display: inline-block; padding: 0 9px; border-radius: 20px; font-size: 12px; border: 1px solid var(--line); color: var(--dim); font-weight: 400; }
   .pill.code { border-color: var(--line); color: var(--dim); font-style: italic; }
-  .pill.todo { color: var(--dim); } .pill.draft { border-color: var(--warn); color: var(--warn); } .pill.done { border-color: var(--good); color: var(--good); }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; margin-top: 6px; }
+  .pill.todo { color: var(--dim); } .pill.draft { border-color: var(--warn); color: var(--warn); } .pill.done { border-color: var(--good); color: var(--good); } .pill.keep { border-color: #7fb3d5; color: #7fb3d5; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; margin-top: 6px; max-width: 100%; }
   .seg button { border: 0; border-radius: 0; padding: 2px 11px; font-size: 12.5px; color: var(--dim); background: transparent; }
   .seg button + button { border-left: 1px solid var(--line); }
   .seg button.on.todo { background: #2a302e; color: var(--text); }
   .seg button.on.draft { background: #3a3220; color: var(--warn); }
   .seg button.on.done { background: #223522; color: var(--good); }
+  .seg button.on.keep { background: #1f2f3a; color: #7fb3d5; }
   .shape { display: flex; align-items: flex-end; gap: 2px; height: 28px; margin: 6px 0 2px; }
   .shape div { flex: 1; background: var(--accent-dim); border-radius: 1px 1px 0 0; min-height: 1px; }
   .numbers { font-size: 12.5px; color: var(--dim); }
@@ -101,6 +102,12 @@
   .tile .pic { background: #3a4541; border-radius: 6px; min-height: 110px; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 6px; }
   .tile .pic img { image-rendering: pixelated; }
   .tile .pic.none { background: none; border: 2px dashed var(--line); color: var(--dim); font-size: 12px; }
+  .tile .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tile .pair .pic { min-height: 80px; flex-direction: column; gap: 4px; }
+  .tile .pair .pic span { color: var(--dim); font-size: 11px; }
+  .tile .pair .pic img { max-width: 100%; height: auto; }
+  .tile .seg { display: flex; } .tile .seg button { flex: 1; padding: 2px 4px; }
+  .tile.waiting { border-color: var(--warn); }
   .tile b { font-size: 14px; overflow-wrap: anywhere; }
   .tile .meta { color: var(--dim); font-size: 12px; }
   .tile .buttons button { font-size: 12.5px; padding: 3px 9px; }
@@ -364,9 +371,11 @@
       <label for="aScale">Zoom <span id="aScaleText"></span></label><input type="range" id="aScale" min="1" max="8" value="4" style="width:100%;accent-color:var(--accent)">
       <label class="check"><input type="checkbox" id="aMade"> Only images with art (files or code)</label>
       <label class="check"><input type="checkbox" id="aFiles"> Only finished art files (hide code art)</label>
-      <div class="buttons"><button id="checkArt">Check the images</button></div>
+      <label class="check" title="Claude's text sprites (art/<id>.yaml) that aren't in the game yet"><input type="checkbox" id="aDrafts"> Only Claude's drafts waiting for you</label>
+      <div class="buttons"><button id="checkArt">Check the images</button>
+        <button id="useDrafts" title="Puts every draft shown into the game (each one goes from todo to draft)">Use all drafts shown</button></div>
       <div class="hint" id="codeHint" style="margin-top:14px"></div>
-      <div class="hint" style="margin-top:10px">Claude draws <b>claude</b> assets as text in <code>art/&lt;id&gt;.yaml</code>: ask it to draw or change one (the art-draw skill), then press <b>Draw</b> here after editing the text yourself. <b>Export</b> runs Aseprite for <b>self</b> assets.</div>
+      <div class="hint" style="margin-top:10px">Claude draws <b>claude</b> assets as text in <code>art/&lt;id&gt;.yaml</code> (ask it to redraw a batch, e.g. "the relic icons"). Its drafts wait here, next to what the game has now, until you press <b>Use draft</b>. <b>Draw</b> puts the text file in the game again after you edit it yourself. <b>Export</b> runs Aseprite for <b>self</b> assets.</div>
     </div>
     <div class="tab pictures">
       <div id="engineSetup" style="display:none">
@@ -575,13 +584,16 @@ function fillFilters() {
   const tracks = S.assets.filter(a => a.kind === 'music');
   fillSelect($('musicPick'), tracks.map(a => [a.id, `${a.id}  (${a.source}, ${a.status})`]), store.get('music', ''));
 }
-const statusMatch = (a, f) => !f || (f === 'unfinished' ? a.status !== 'done' : a.status === f);
+const FINISHED = ['done', 'keep'];  // keep: the game's own version (made by its code) stays, by choice
+const STATUS_TIPS = { todo: 'Not made yet', draft: 'Made, not final', done: 'Finished',
+  keep: "The game keeps its own version (drawn or played by its code). Counts as finished; no file needed." };
+const statusMatch = (a, f) => !f || (f === 'unfinished' ? !FINISHED.includes(a.status) : a.status === f);
 const sizeText = a => Array.isArray(a.size) ? a.size.join('×') : '';
 const codePill = a => a.from_code ? ' <span class="pill code" title="No art file yet: this is how the game draws it from its code">from code</span>' : '';
 const framesText = a => Object.entries(a.frames || {}).map(([n, c]) => `${n} ${c}`).join(', ');
 
 function statusButtons(a) {
-  return `<div class="seg">${S.statuses.map(s => `<button class="${s}${a.status === s ? ' on' : ''}" data-status="${s}" data-id="${esc(a.id)}">${s}</button>`).join('')}</div>`;
+  return `<div class="seg">${S.statuses.map(s => `<button class="${s}${a.status === s ? ' on' : ''}" data-status="${s}" data-id="${esc(a.id)}" title="${esc(STATUS_TIPS[s] || '')}">${s}</button>`).join('')}</div>`;
 }
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-status]');
@@ -599,15 +611,15 @@ function soundNumbers(i) {
 
 // ---------- Assets tab ----------
 function renderAssets() {
-  const c = S.counts, total = c.todo + c.draft + c.done;
-  const pct = total ? Math.round(100 * c.done / total) : 0;
+  const c = S.counts, total = S.statuses.reduce((n, s) => n + (c[s] || 0), 0);
+  const pct = total ? Math.round(100 * (c.done + (c.keep || 0)) / total) : 0;
   $('percent').textContent = pct + '% done';
   $('percentBar').style.width = pct + '%';
-  $('statusCounts').innerHTML = `<span>${total} assets</span><span>${c.done} done</span><span>${c.draft} draft</span><span>${c.todo} todo</span>`;
+  $('statusCounts').innerHTML = `<span>${total} assets</span><span>${c.done} done</span>${c.keep ? `<span title="${esc(STATUS_TIPS.keep)}">${c.keep} kept</span>` : ''}<span>${c.draft} draft</span><span>${c.todo} todo</span>`;
   const kinds = {};
-  for (const a of S.assets) { const k = kinds[a.kind] ??= { todo: 0, draft: 0, done: 0 }; if (a.status in k) k[a.status]++; }
-  $('kindTable').innerHTML = '<tr><th>kind</th><th>todo</th><th>draft</th><th>done</th></tr>' +
-    Object.entries(kinds).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.todo}</td><td>${v.draft}</td><td>${v.done}</td></tr>`).join('');
+  for (const a of S.assets) { const k = kinds[a.kind] ??= Object.fromEntries(S.statuses.map(s => [s, 0])); if (a.status in k) k[a.status]++; }
+  $('kindTable').innerHTML = '<tr><th>kind</th>' + S.statuses.map(s => `<th>${s}</th>`).join('') + '</tr>' +
+    Object.entries(kinds).map(([k, v]) => `<tr><td>${esc(k)}</td>` + S.statuses.map(s => `<td>${v[s]}</td>`).join('') + '</tr>').join('');
   $('manifestProblems').innerHTML = S.problems.map(p => '<li>' + esc(p) + '</li>').join('');
 
   const kind = $('fKind').value, status = $('fStatus').value, text = $('fText').value.trim().toLowerCase();
@@ -729,19 +741,28 @@ function renderArt() {
   $('aScaleText').textContent = scale + '×';
   const kind = $('aKind').value, status = $('aStatus').value, made = $('aMade').checked;
   const images = S.assets.filter(a => ['sprite', 'tileset', 'icon', 'ui', 'font'].includes(a.kind) && (!kind || a.kind === kind) &&
-    statusMatch(a, status) && (!made || a.preview) && (!$('aFiles').checked || (a.preview && !a.from_code)));
-  $('artTitle').textContent = `Images (${images.length})`;
+    statusMatch(a, status) && (!made || a.preview) && (!$('aFiles').checked || (a.preview && !a.from_code)) &&
+    (!$('aDrafts').checked || a.draft_waiting));
+  const waiting = images.filter(a => a.draft_waiting);
+  $('artTitle').textContent = `Images (${images.length})` + (waiting.length ? ` · ${waiting.length} drafts waiting` : '');
+  $('useDrafts').disabled = !waiting.length;
+  $('useDrafts').textContent = waiting.length ? `Use all ${waiting.length} drafts shown` : 'Use all drafts shown';
   $('codeHint').innerHTML = S.code_art ? `<b>from code</b>: no art file yet, so this is the game's own drawing from <code>${esc(S.code_art)}</code> (magenta = player color). A file replaces it.` :
     'Art the game draws in code? Set <code>code_art</code> in assets.yaml to show it here.';
   $('gallery').innerHTML = images.length ? images.map(a => {
     const w = Array.isArray(a.size) ? a.size[0] * scale : 32, h = Array.isArray(a.size) ? a.size[1] * scale : 32;
-    const pic = a.preview ? `<div class="pic"><img src="${a.preview}" alt="${esc(a.id)}" onload="this.style.width=(this.naturalWidth*${scale})+'px'"></div>`
+    const img = (url, label) => `<img src="${url}" alt="${esc(label)}" onload="this.style.width=(this.naturalWidth*${scale})+'px'"
+      onerror="this.replaceWith(Object.assign(document.createElement('span'), {textContent: 'this draft has a mistake: press Use draft to see it'}))">`;
+    let pic = a.preview ? `<div class="pic">${img(a.preview, a.id)}</div>`
       : `<div class="pic none"><div style="width:${w}px;height:${h}px;max-width:100%;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center">${sizeText(a) || 'not made'}</div></div>`;
+    if (a.draft_waiting) pic = `<div class="pair">${a.preview ? `<div class="pic">${img(a.preview, a.id)}<span>now${a.from_code ? ' (code)' : ''}</span></div>`
+      : '<div class="pic none">nothing yet</div>'}<div class="pic">${img(a.draft, a.id + ' draft')}<span>Claude's draft</span></div></div>`;
     const buttons = [];
-    if (a.source === 'claude' && a.src_exists) buttons.push(`<button data-draw="${esc(a.id)}" title="Render ${esc(a.src)} to PNG">Draw</button>`);
+    if (a.draft_waiting) buttons.push(`<button class="primary" data-draw="${esc(a.id)}" title="Draws ${esc(a.src)} into the game (${esc(a.file)})">Use draft</button>`);
+    else if (a.source === 'claude' && a.src_exists) buttons.push(`<button data-draw="${esc(a.id)}" title="Draws ${esc(a.src)} into the game again (${esc(a.file)})">Draw</button>`);
     if (a.source === 'self' && a.src_exists) buttons.push(`<button data-export="${esc(a.id)}" title="Export ${esc(a.src)} with Aseprite">Export</button>`);
     if (a.preview && !a.from_code) buttons.push(`<button data-check="${esc(a.id)}">Check</button>`);
-    return `<div class="tile">${pic}<b>${esc(a.id)}${codePill(a)}</b>
+    return `<div class="tile${a.draft_waiting ? ' waiting' : ''}">${pic}<b>${esc(a.id)}${a.draft_waiting ? '' : codePill(a)}</b>
       <div class="meta">${esc(a.kind)} · ${esc(a.source)}${sizeText(a) ? ' · ' + sizeText(a) : ''}${framesText(a) ? '<br>' + esc(framesText(a)) : ''}</div>
       ${statusButtons(a)}<div class="buttons">${buttons.join('')}</div></div>`;
   }).join('') : '<div class="empty">Nothing matches.</div>';
@@ -753,6 +774,15 @@ for (const id of ['aKind', 'aStatus']) $(id).onchange = () => { store.set(id, $(
 $('aScale').oninput = () => { store.set('aScale', $('aScale').value); renderArt(); };
 $('aMade').onchange = () => renderArt();
 $('aFiles').onchange = () => renderArt();
+$('aDrafts').onchange = () => renderArt();
+$('useDrafts').onclick = async () => {
+  const ids = $('gallery').querySelectorAll('.tile.waiting [data-draw]');
+  if (!ids.length || !confirm(`Put ${ids.length} of Claude's drafts into the game? Each one goes from todo to draft.`)) return;
+  let used = 0;
+  for (const b of ids) { if (!await api('/api/art/draw', { id: b.dataset.draw }, true)) break; used++; }
+  await load();
+  if (used === ids.length) showStatus(`${used} drafts are in the game now.`);
+};
 $('checkArt').onclick = () => {
   const ids = S.assets.filter(a => a.preview && !a.from_code).map(a => a.id);
   if (ids.length) api('/api/check', { ids }); else showStatus('No images made yet.');

@@ -68,7 +68,7 @@ class FrameFilesTests(unittest.TestCase):
 
     def test_draw_writes_one_file_per_frame_and_checks(self) -> None:
         self.write_manifest()
-        code, out = self.run_cli("draw")
+        code, out = self.run_cli("draw", "--all")
         self.assertEqual(code, 0, out)
         folder = self.root / "assets" / "art"
         self.assertEqual(sorted(p.name for p in folder.iterdir()),

@@ -34,7 +34,9 @@ SOURCES = {
 }
 # Sources that need a license entry before the asset counts as usable.
 LICENSED_SOURCES = {"pack", "library", "commission"}
-STATUSES = ["todo", "draft", "done"]
+STATUSES = ["todo", "draft", "done", "keep"]
+# Finished statuses. keep = the game's own version (made by its code: text sprites, synth sounds) stays, by choice.
+FINISHED = ("done", "keep")
 # Where each source's editable file lives unless an asset sets `src`.
 DEFAULT_SOURCES = {"claude": "art/{id}.yaml", "self": "art/{id}.aseprite", "sfxr": "sounds/{id}.yaml"}
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]*$")
@@ -276,7 +278,7 @@ def validate(manifest: Manifest, check_files: bool = True) -> list[str]:
         if a.loop is not None and (not isinstance(a.loop, bool) or a.kind != "music"):
             problems.append(f"{where}: loop is true / false, for music only")
 
-        if a.source in LICENSED_SOURCES and a.status != "todo":
+        if a.source in LICENSED_SOURCES and a.status not in ("todo", "keep"):
             try:
                 lic = effective_license(manifest, a)
             except Exception as error:  # a missing or broken pack.yaml

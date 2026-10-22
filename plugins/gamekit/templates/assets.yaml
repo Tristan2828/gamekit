@@ -4,7 +4,8 @@
 #   id        lowercase snake_case, unique
 #   kind      sprite | tileset | icon | ui | font | sfx | voice | music   (voice: spoken lines, .wav)
 #   source    claude | self | pack | library | sfxr | synth | commission | ai (local AI model: gamekit engines)
-#   status    todo | draft | done
+#   status    todo | draft | done | keep   (keep: the game's own code-made version stays, by choice;
+#             counts as finished, needs no file)
 #   file      path inside `output` (.png for images, .wav for sfx and voice, .ogg for music)
 #   size      [width, height] in pixels (images only; one frame for sprites)
 #   frames    animation name -> frame count, e.g. {idle: 4, walk: 6} (sprites only)

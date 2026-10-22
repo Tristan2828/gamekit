@@ -48,6 +48,10 @@ User guide: `docs/asset-page.md`. Logic: `pictures.py` (library, shrinking), `to
 - Animate panel: from a picture, empty frames are made by FLUX from it (`refs`); from a sprite tile (`anim.sprite`)
   the frames are too small for AI, so "Animate with Claude" makes drafts for every frame (`--every-frame`) and the
   user asks Claude to "animate the <id> drafts" (see the art-draw skill).
+- Claude's own art (`source: claude`): `seed` starts `art/<id>.yaml` from the game's `code_art` (never overwrites);
+  Claude reviews drafts with `preview --draft/--compare` (in memory) and the user presses **Use draft** on the Art tab
+  (`draft_waiting`: yaml newer than the file). Bare `draw` refuses without ids or `--all`. `keep` status = the game's
+  own code version stays (finished, no file, no license).
 - "Work from this" = FLUX reference images: the new picture keeps the creature's look; the words say only what changes.
 - Packs tab (`packs.py`): downloads sit in the game's `packs/` (zip/rar/7z/folder; `_` names ignored), Import makes
   `packs/<name>/files/` + `pack.yaml` (license, `download`, `starred`). Nothing leaves an unlicensed pack. A boxed part

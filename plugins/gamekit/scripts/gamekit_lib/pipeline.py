@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import art, aseprite, audio, music, sfxr
+from . import art, aseprite, audio, codeart, music, sfxr
 from .manifest import KINDS, Asset, Manifest
 from .palette import Color, Entry, load_entries
 
@@ -153,6 +153,27 @@ def preview_items(manifest: Manifest, assets: list[Asset]) -> list[tuple[str, Im
             with Image.open(path) as image:
                 items.append((a.id, image.convert("RGBA")))
     return items
+
+
+def draft_image(manifest: Manifest, asset: Asset) -> Image.Image | None:
+    """The asset's text sprite (art/<id>.yaml) drawn in memory, not saved: None if it has none."""
+    src = manifest.source_path(asset)
+    if src is None or src.suffix.lower() not in (".yaml", ".yml") or not src.exists():
+        return None
+    image, _ = art.render(art.load_text_sprite(src, palette_entries(manifest)), where=str(src))
+    return image
+
+
+def current_image(manifest: Manifest, asset: Asset) -> tuple[Image.Image | None, str]:
+    """What the game shows today: the asset's file, else the game's code art; and which one ("file", "code")."""
+    items = preview_items(manifest, [asset])
+    if items:
+        return items[0][1], "file"
+    try:
+        image = codeart.render(manifest, asset)
+    except codeart.CodeArtError:
+        image = None
+    return image, "code" if image is not None else ""
 
 
 SFX_MAX_SECONDS = 5.0

@@ -1,3 +1,5 @@
+import contextlib
+import io
 import sys
 import tempfile
 import unittest
@@ -7,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugins" / "gam
 
 from PIL import Image  # noqa: E402
 
-from gamekit_lib import codeart, manifest, pipeline  # noqa: E402
+from gamekit_lib import cli, codeart, manifest, pipeline  # noqa: E402
 
 SCRIPT = """class_name PixelArt
 ## Sprites as text. "P"/"p" are the player colors.
@@ -111,6 +113,78 @@ class CodeArtTests(unittest.TestCase):
         Image.new("RGBA", (2, 2), (0, 255, 0, 255)).save(self.root / "assets" / "art" / "ghost.png")
         items = pipeline.preview_items(self.m, [self.by_id["ghost"]])
         self.assertEqual(items[0][1].getpixel((0, 0)), (0, 255, 0, 255))
+
+
+class SeedTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "src").mkdir()
+        (self.root / "src" / "pixel_art.gd").write_text(SCRIPT, encoding="utf-8")
+        # k matches the code's color, w is a different white, so w needs a `keys:` line
+        (self.root / "palette.hex").write_text("000000 k\nf0f0f0 w\nff00ff P\n800080 p\n", encoding="utf-8")
+        (self.root / "assets.yaml").write_text(MANIFEST.replace("code_art:", "palette: palette.hex\ncode_art:") +
+                                               "  - {id: blob2, kind: sprite, source: claude, file: art/blob2.png,"
+                                               " size: [2, 2], frames: {idle: 1, walk: 3}, replaces: blob}\n",
+                                               encoding="utf-8")
+        self.m = manifest.load(self.root / "assets.yaml")
+        self.by_id = {a.id: a for a in self.m.assets}
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def run_cli(self, *args: str) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            code = cli.main(["-m", str(self.root / "assets.yaml"), *args])
+        return code, out.getvalue()
+
+    def test_seeded_sprite_draws_like_the_code(self) -> None:
+        text, warnings = codeart.seed_text(self.m, self.by_id["blob"], pipeline.palette_entries(self.m))
+        self.assertEqual(warnings, [])
+        self.assertIn('"w": ffffff', text)
+        self.assertIn('"k": k', text)  # same color as the palette's k
+        (self.root / "art").mkdir()
+        (self.root / "art" / "blob.yaml").write_text(text, encoding="utf-8")
+        draft = pipeline.draft_image(self.m, self.by_id["blob"])
+        self.assertEqual(list(draft.getdata()), list(codeart.render(self.m, self.by_id["blob"]).getdata()))
+        self.assertFalse((self.root / "assets").exists())  # nothing written into the game
+
+    def test_missing_frames_copy_the_one_before(self) -> None:
+        text, warnings = codeart.seed_text(self.m, self.by_id["blob2"], [])
+        self.assertEqual(warnings, ["blob2: the code has no blob_walk_3; it starts as a copy of the frame before"])
+        self.assertEqual(text.count("- |"), 4)
+
+    def test_still_image_and_see_through_colors(self) -> None:
+        text, warnings = codeart.seed_text(self.m, self.by_id["hero"], [])
+        self.assertIn("rows: |\n  k\n  k\n  h\n", text)
+        self.assertEqual(warnings, ["hero: 'h' is see-through in the code; text sprites draw it solid"])
+
+    def test_cli_seed_never_overwrites(self) -> None:
+        (self.root / "art").mkdir()
+        (self.root / "art" / "hero.yaml").write_text("rows: |\n  k\n", encoding="utf-8")
+        code, out = self.run_cli("seed", "--kind", "sprite")
+        self.assertEqual(code, 0)
+        self.assertIn("seeded 2 text sprites", out)  # blob, blob2; hero already has one
+        self.assertEqual((self.root / "art" / "hero.yaml").read_text(encoding="utf-8"), "rows: |\n  k\n")
+        code, out = self.run_cli("seed", "hero", "ghost")
+        self.assertIn("hero: skipped (art/hero.yaml already exists)", out)
+        self.assertIn("ghost: skipped (no 'ghost' in src/pixel_art.gd)", out)
+
+    def test_cli_preview_compare(self) -> None:
+        self.assertEqual(self.run_cli("seed", "blob")[0], 0)
+        out_png = self.root / "compare.png"
+        code, out = self.run_cli("preview", "--compare", "-o", str(out_png))
+        self.assertEqual(code, 0, out)
+        self.assertIn("(2 images)", out)  # blob now (code art) + blob draft; assets without a draft left out
+        self.assertTrue(out_png.exists())
+        code, out = self.run_cli("preview", "--kind", "sprite", "--status", "todo", "-o", str(out_png))
+        self.assertIn("(3 images)", out)  # code art of blob, hero, blob2
+        code, out = self.run_cli("preview", "--kind", "icon", "-o", str(out_png))
+        self.assertEqual(code, 1)  # ghost has no file or code art; oops' code art is broken
+        self.assertIn("nothing to preview", out)
+        code, out = self.run_cli("preview", "--bg", "nope", "-o", str(out_png))
+        self.assertEqual(code, 1)
 
 
 class FrameNameTests(unittest.TestCase):

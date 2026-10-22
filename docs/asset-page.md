@@ -60,12 +60,13 @@ If Claude or you edit `assets.yaml` while the page is open, press **Refresh** (t
 | **todo** | Not made yet (or the game still uses its old placeholder). |
 | **draft** | A file exists but isn't final. Making a file on the page moves an asset to draft by itself. |
 | **done** | You're happy with it in the game. Only you set this. |
+| **keep** | The game keeps its own version (the sprite or sound its code makes), because you chose it. Counts as finished; no file needed. |
 | **source** | Where the asset comes from: `claude` (Claude draws it), `ai` (made by an AI engine on your PC), `sfxr` (the retro sound generator), `synth` (your game's own music code), `pack` / `library` (downloaded), `self` (you make it in Aseprite). |
 | **take** | One try. You make a few takes, listen or look, and keep the best. Takes are scratch files: only the one you **use** becomes part of the game. |
 | **seed** | The number that picks one particular take. The same settings and seed make the same take again. |
 | **engine** | One AI model set up on your PC (pictures, music, sounds, voices). |
 
-The **todo / draft / done** buttons under every asset change its status straight away.
+The **todo / draft / done / keep** buttons under every asset change its status straight away.
 
 ## AI engines: how they work
 
@@ -223,9 +224,13 @@ first for better structure, but takes about 7 minutes a take on your AMD card an
   today. Magenta parts are the player color. Once an art file exists, the page shows the file instead,
   just like the game. **Only finished art files** hides the code art.
 - Animated sprites show all their frames together.
-- **Draw** (for `claude` assets): Claude writes each sprite as text in `art/<id>.yaml`. To get a new or
-  changed sprite, ask Claude (e.g. "draw the bat"). If you edit the text file yourself, press
-  **Draw** to turn it into the PNG.
+- **Claude's drafts** (for `claude` assets): Claude writes each sprite as text in `art/<id>.yaml`, which the
+  game doesn't read. Ask for a batch, e.g. "redraw the relic icons": Claude starts each draft from the game's
+  own drawing (`gamekit seed`) and improves it. A tile with a draft waiting has a yellow border and shows
+  **now** next to **Claude's draft**. **Only Claude's drafts waiting for you** shows just those.
+  - **Use draft** puts that draft into the game (todo becomes draft). **Use all drafts shown** does every
+    waiting tile on screen, after asking once. Don't like one? Tell Claude what to change, or leave it.
+  - **Draw** (no draft waiting): draws the text file into the game again, e.g. after you edited it yourself.
 - **Export** (for `self` assets): turns your Aseprite file into the PNG. Needs Aseprite.
 - **Check** / **Check the images**: size and palette problems, listed at the top.
 
@@ -394,8 +399,10 @@ entries in `assets.yaml` with `kind: voice`: ask Claude to add the ones your gam
 2. **Sounds**: pick a sound, make AI or retro takes, listen, and use or keep the best.
 3. **Music**: describe a track, make two or three takes, use the best for its track and fix the loop end.
 4. **Voices**: write the lines, pick a voice, keep the best readings and use them.
-5. **Pictures**: make references or textures; for small sprites, ask Claude to draw them from your favourite picture.
-6. Play the game. Happy with something? Mark the asset **done**.
+5. **Art**: ask Claude to redraw a family of icons or sprites; look at its drafts next to what the game has now and
+   **Use** the ones you like. **Pictures**: make references or textures; for small sprites, ask Claude to draw them
+   from your favourite picture.
+6. Play the game. Happy with something? Mark the asset **done**. Decided the game's own version stays? Mark it **keep**.
 7. Before a release: **Check the manifest**, **Check the files**, and **Write CREDITS.md**.
 
 ## When something goes wrong
