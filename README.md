@@ -125,7 +125,7 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 3 | Pack import: unzip, record license, crop / slice / resize / recolor into assets | ✅ done |
 | 4 | Sound effects: sfxr generator with presets and variants, clean-up of any sound file to WAV, sound checks | ✅ done |
 | 5 | Music: render the game's scores with Godot headless or convert music files, looping OGG, loudness, loop checks | ✅ done |
-| 6 | First real use in GameTest: game loads files; heroes, card icons, 9 music tracks, 7 sound effects (picked by ear from 2 rounds of candidates) | ✅ done |
+| 6 | First real use in Medieval Survival (then GameTest): game loads files; heroes, card icons, 9 music tracks, 7 sound effects (picked by ear from 2 rounds of candidates) | ✅ done |
 | 7 | Asset page (`gamekit ui`): assets, sounds, music and art tabs in the browser | ✅ done |
 | 8 | Local AI engines: tested on an AMD RX 7800 XT (ROCm on Windows); **Pictures** tab with FLUX.2 klein (~8 s a take) | ✅ done |
 | 9 | **Music** engine: ACE-Step 1.5 on AMD (~1.5 s per second of music), AI takes on the Music tab, "use for a track" with loop cut | ✅ done |
