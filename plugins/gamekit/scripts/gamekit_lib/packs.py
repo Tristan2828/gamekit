@@ -85,6 +85,8 @@ def packs_dir(root: Path) -> Path:
 
 
 def load(root: Path, name: str) -> Pack:
+    if not NAME_PATTERN.match(name):  # a plain name, so it can't reach outside packs/
+        raise PackError(f"not a pack name: {name!r}")
     folder = packs_dir(root) / name
     meta = folder / "pack.yaml"
     if not meta.exists():
@@ -240,6 +242,8 @@ def _extract_zip(archive: Path, dest: Path) -> None:
             name = m.filename.replace("\\", "/")
             if name.startswith("__MACOSX/") or Path(name).name in (".DS_Store", "Thumbs.db"):
                 continue
+            # characters Windows can't have in a file name (a ":" would write a hidden stream instead)
+            name = "/".join(re.sub(r'[:<>|?*"]', "_", part) for part in name.split("/"))
             target = (base / name).resolve()
             if base != target and base not in target.parents:
                 raise PackError(f"{archive}: refusing unsafe path {m.filename!r}")
@@ -478,7 +482,7 @@ def to_sprite(manifest: Manifest, asset: Asset, image: Image.Image, snap: bool =
     if image.size == size or asset.kind == "tileset":
         sprite = image if image.size == size else resize(image, size)
         return clean_alpha(pictures.snap_to_palette(sprite, colors)) if colors else sprite
-    line = manifest.sprites.get("outline") if outline else None
+    line = manifest.outline if outline else None
     return pictures.to_sprite(image, size, colors, background=False, outline=parse_hex(line) if line else None,
                               box=(0, 0, image.width, image.height))
 
@@ -512,3 +516,27 @@ def to_picture(manifest: Manifest, pack: Pack, rel: str, box: list[int] | None =
                        "for": for_id, "pack": pack.name, "pack_file": rel, "box": list(box) if box else None,
                        "scale": scale if isinstance(scale, int) else round(scale, 3)})
     return path
+
+
+def picture_source(manifest: Manifest, names: list[str]) -> tuple[dict[str, str], str]:
+    """Where used pictures' art comes from, for assets.yaml: pictures copied from one pack are that pack's art
+    (source: pack, its license); anything else is AI art. Pictures copied from two packs can't make one asset (it
+    has one license). AI art worked from pack art gets a note naming the packs whose licenses ask for something,
+    so the user can check (CC0 needs nothing)."""
+    metas = [pictures.read_meta(pictures.path_of(manifest, name)) for name in names]
+    own = {str(m.get("pack") or "") for m in metas}
+    if len(own) == 1 and "" not in own:
+        return {"source": "pack", "license": "{pack: " + own.pop() + "}"}, ""
+    if len(own - {""}) > 1:
+        raise PackError(f"these pictures come from {len(own - {''})} packs ({', '.join(sorted(own - {''}))}), "
+                        "but an asset has one license: use pictures from one pack")
+    check = []
+    for name in sorted({p for m in metas for p in pictures.packs_of(m)}):
+        try:
+            lic = load(manifest.root, name).license.get("name", "")
+        except PackError:
+            lic = ""
+        if not re.search(r"\bCC0\b|public domain", lic, re.I):
+            check.append(f"{name} ({lic or 'license not set'})")
+    note = f". Made from pack art: check that {', '.join(check)} allows that, and credit it if asked" if check else ""
+    return {"source": "ai"}, note

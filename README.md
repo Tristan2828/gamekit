@@ -78,10 +78,11 @@ python <gamekit>/plugins/gamekit/scripts/gamekit.py init --game "My Game"
 python <gamekit>/plugins/gamekit/scripts/gamekit.py validate
 python <gamekit>/plugins/gamekit/scripts/gamekit.py status --todo
 python <gamekit>/plugins/gamekit/scripts/gamekit.py credits
-python <gamekit>/plugins/gamekit/scripts/gamekit.py draw [ids]       # art/<id>.yaml -> PNG
+python <gamekit>/plugins/gamekit/scripts/gamekit.py seed [ids] [--kind icon] [--status todo]  # art/<id>.yaml from the game's code art
+python <gamekit>/plugins/gamekit/scripts/gamekit.py draw <ids> | --all  # art/<id>.yaml -> PNG in the game
 python <gamekit>/plugins/gamekit/scripts/gamekit.py export [ids]     # art/<id>.aseprite -> PNG
 python <gamekit>/plugins/gamekit/scripts/gamekit.py check [ids]
-python <gamekit>/plugins/gamekit/scripts/gamekit.py preview [ids] --scale 8
+python <gamekit>/plugins/gamekit/scripts/gamekit.py preview [ids] --scale 8 [--kind icon] [--draft | --compare] [--bg checker]
 python <gamekit>/plugins/gamekit/scripts/gamekit.py pack add <zip|rar|7z|folder> <name>   # then: pack info / pack license
 python <gamekit>/plugins/gamekit/scripts/gamekit.py pack list                                # packs, and downloads in packs/ not imported yet
 python <gamekit>/plugins/gamekit/scripts/gamekit.py pack picture <name> <file> [--crop x,y,w,h] [--for <asset>]  # to pictures/, to work from
@@ -134,7 +135,9 @@ sidecar next to the PNG listing each frame's position, or, with `frame_files: tr
 | 13 | **Sprite tiles** and **touch-up drafts**: game-sized sprites kept in `pictures/`; Claude fixes their pixels as text, the user presses Use | ✅ done |
 | 14 | Pictures tab tiles reworked (0.18 / 0.19): star, Show/View filters, icon tools, Use panel, Work from this, animating sprites with Claude | ✅ done |
 | 15 | **Packs** tab (0.20): import downloaded packs (zip/rar/7z), license kept, browse and star images, box a part to use in game or copy to Pictures | ✅ done |
-| 16 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
+| 16 | **Batch drafts** (0.21): `seed` Claude's text sprites from the game's code art, compare sheets, drafts waiting on the Art tab, `keep` status | ✅ done |
+| 17 | Asset page speed (0.22): cached thumbnails (~15 s to under 1 s), status clicks without reloading, safer Use, keyboard access, Work on this | ✅ done |
+| 18 | 3D models (Hunyuan3D 2), texturing, rigging via Blender | planned |
 
 ## Develop
 

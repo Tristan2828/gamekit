@@ -1,5 +1,7 @@
 """The Packs tab: downloads waiting in packs/, importing them (.zip, folders, .rar/.7z), the shortlist, and taking a
 boxed part of a pack image as a sprite or as a picture."""
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -12,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugins" / "gam
 
 from PIL import Image  # noqa: E402
 
-from gamekit_lib import manifest, packs, pictures, ui  # noqa: E402
+from gamekit_lib import cli, manifest, packs, pictures, ui  # noqa: E402
 
 RED, BLUE = (200, 30, 30), (20, 40, 200)
 MANIFEST = """game: T
@@ -208,9 +210,29 @@ class PackTabTests(unittest.TestCase):
         Image.new("RGB", (64, 64), RED).save(made)
         meta = pictures.record(made, {"prompt": "x", "refs": [str(copy)]}, {"seed": 1, "width": 64, "height": 64})
         self.assertEqual(meta["packs"], ["space-ships"])
-        changes, note = ui._picture_source(self.loaded(), [made.name])
+        changes, note = packs.picture_source(self.loaded(), [made.name])
         self.assertEqual(changes, {"source": "ai"})
         self.assertIn("space-ships (CC-BY 4.0)", note)
+
+    def test_cli_picture_use_keeps_the_pack_license(self) -> None:
+        self.add_zip()
+        pack = self.licensed()
+        path = packs.to_picture(self.loaded(), pack, "ships/sheet.png", [8, 0, 8, 8], "rock")
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = cli.main(["-m", str(self.root / "assets.yaml"), "picture-use", path.name, "rock",
+                             "--no-outline", "--no-palette"])
+        self.assertEqual(code, 0)
+        rock = next(a for a in self.loaded().assets if a.id == "rock")
+        self.assertEqual((rock.source, rock.license), ("pack", {"pack": "space-ships"}))
+
+    def test_pictures_from_two_packs_are_refused(self) -> None:
+        folder = pictures.folder(self.loaded())
+        folder.mkdir(parents=True, exist_ok=True)
+        for name, pack_name in (("a.png", "one"), ("b.png", "two")):
+            Image.new("RGB", (8, 8), RED).save(folder / name)
+            (folder / name).with_suffix(".json").write_text(json.dumps({"pack": pack_name}), encoding="utf-8")
+        with self.assertRaises(packs.PackError):
+            packs.picture_source(self.loaded(), ["a.png", "b.png"])
 
 
 class SetLicenseTests(unittest.TestCase):

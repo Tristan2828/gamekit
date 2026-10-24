@@ -228,7 +228,7 @@ def add_outline(sprite: Image.Image, color: Color) -> Image.Image:
 
 def sprite_colors(manifest: Manifest) -> list[Color]:
     """The palette a picture snaps to: the game's palette without its reserved colors (e.g. player colors)."""
-    reserved = {palette.parse_hex(c) for c in manifest.sprites.get("reserved_colors", []) or []}
+    reserved = {palette.parse_hex(c) for c in manifest.reserved_colors}
     return [e.color for e in pipeline.palette_entries(manifest) if e.color not in reserved]
 
 
@@ -250,7 +250,7 @@ def make_sprite(manifest: Manifest, asset: Asset, name: str, background: bool = 
         if asset.kind == "tileset":  # a texture fills the whole tile: no background to remove, no outline
             sprite = picture.convert("RGBA").resize((asset.size[0], asset.size[1]), Image.Resampling.BOX)
             return snap_to_palette(sprite, colors) if colors else sprite
-        line = manifest.sprites.get("outline") if outline else None
+        line = manifest.outline if outline else None
         return to_sprite(picture, (asset.size[0], asset.size[1]), colors, background,
                          palette.parse_hex(line) if line else None)
 
@@ -265,7 +265,7 @@ def use_as_asset(manifest: Manifest, asset: Asset, name: str, background: bool =
 
 def check_frame(manifest: Manifest, asset: Asset, frame: str = "") -> str:
     """The frame one image can become (`frame`, or the asset itself / its first frame); refuses sheet animations."""
-    if asset.frames and sum(asset.frames.values()) > 1 and not manifest.frame_paths(asset):
+    if asset.frames and asset.frame_count() > 1 and not manifest.frame_paths(asset):
         raise PictureError(f"{asset.id} is animated ({', '.join(f'{k} {v}' for k, v in asset.frames.items())}) and "
                            "kept as one sheet; a picture makes one frame. Ask Claude to draw the animation from it.")
     targets = frame_targets(manifest, asset)
@@ -317,7 +317,7 @@ def make_frames(manifest: Manifest, asset: Asset, chosen: dict[str, str], backgr
         raise PictureError("one of the pictures is all background: try without removing the background")
     box = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
     colors = sprite_colors(manifest) if snap else None
-    line = manifest.sprites.get("outline") if outline else None
+    line = manifest.outline if outline else None
     size = (asset.size[0], asset.size[1])
     return {frame: to_sprite(image, size, colors, False, palette.parse_hex(line) if line else None, box)
             for frame, image in images.items()}
@@ -361,7 +361,7 @@ def original_of(manifest: Manifest, name: str) -> str:
         seen.add(name)
         meta = read_meta(path_of(manifest, name))
         parent = meta.get("sprite_of") or meta.get("cutout_of")
-        if not parent:
+        if not parent or not (folder(manifest) / str(parent)).is_file():  # removed: this one is the oldest left
             break
         name = parent
     return name

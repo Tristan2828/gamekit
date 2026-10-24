@@ -8,6 +8,8 @@ picture is used (Use on the Pictures tab, or picture-use), like any other pictur
 """
 from __future__ import annotations
 
+import string
+
 from pathlib import Path
 
 from PIL import Image
@@ -16,7 +18,8 @@ from . import art, made, pictures, pipeline
 from .manifest import Asset, Manifest
 from .palette import Color, Entry, to_hex
 
-SPARE_KEYS = "0123456789@#$%&*+=?!<>~^"  # for colors that aren't in the palette (rare after snapping)
+# for colors with no one-character palette name (unnamed palettes, or off-palette colors)
+SPARE_KEYS = "0123456789@#$%&*+=?!<>~^" + string.ascii_letters
 
 
 class TouchUpError(Exception):

@@ -124,7 +124,7 @@ class PipelineTests(unittest.TestCase):
             "  - {id: hero, kind: sprite, source: claude, file: sprites/hero.png, size: [2, 2], frames: {walk: 2}}\n")
         (self.folder / "art" / "hero.yaml").write_text(
             "frames:\n  walk:\n    - |\n      kw\n      wk\n    - |\n      wk\n      kw\n", encoding="utf-8")
-        code, out = self.run_cli("draw")
+        code, out = self.run_cli("draw", "--all")
         self.assertEqual(code, 0, out)
         self.assertTrue((self.folder / "assets" / "sprites" / "hero.png").exists())
         side = json.loads((self.folder / "assets" / "sprites" / "hero.json").read_text(encoding="utf-8"))

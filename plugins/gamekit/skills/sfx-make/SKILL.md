@@ -108,7 +108,7 @@ set instead and let the user pick:
    answer by number and letter ("3 old, 4 B, 7 neither").
 3. Zip the folder and send it to the user (it's a scratch file, not part of the game).
 4. Apply the answers: install only the picks; for "old" set the asset back to its code source
-   with `status: todo` and a note that the owner keeps it (so later sessions don't retry it); for
+   with `status: keep` and a note saying the owner chose it by ear (so later sessions don't retry it); for
    "neither", make a new round from different sources. Expect the old sound to win often: it was
    tuned to the game.
 

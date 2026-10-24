@@ -182,7 +182,7 @@ def graphics() -> str:
         try:
             names = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_VideoController).Name"],
-                capture_output=True, text=True, timeout=30).stdout
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30).stdout
         except (OSError, subprocess.TimeoutExpired):
             names = ""
     elif shutil.which("nvidia-smi"):
@@ -249,7 +249,7 @@ def setup(name: str, run: Callable[[list[str]], None] | None = None) -> Iterator
     yield "Checking that it works"
     probe = ("import torch, json; print(json.dumps([torch.__version__, torch.cuda.is_available()]))" if engine.torch
              else "import json; print(json.dumps(['', False]))")
-    check = subprocess.run([py, "-c", probe], capture_output=True, text=True, timeout=600)
+    check = subprocess.run([py, "-c", probe], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
     if check.returncode != 0:
         raise EngineError(f"{'PyTorch' if engine.torch else 'Its Python'} doesn't start: {check.stderr.strip()[-600:]}")
     version, gpu = json.loads(check.stdout.strip().splitlines()[-1])

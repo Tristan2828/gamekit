@@ -60,12 +60,14 @@ If Claude or you edit `assets.yaml` while the page is open, press **Refresh** (t
 | **todo** | Not made yet (or the game still uses its old placeholder). |
 | **draft** | A file exists but isn't final. Making a file on the page moves an asset to draft by itself. |
 | **done** | You're happy with it in the game. Only you set this. |
+| **keep** | The game keeps its own version (the sprite or sound its code makes), because you chose it. Counts as finished; no file needed. |
 | **source** | Where the asset comes from: `claude` (Claude draws it), `ai` (made by an AI engine on your PC), `sfxr` (the retro sound generator), `synth` (your game's own music code), `pack` / `library` (downloaded), `self` (you make it in Aseprite). |
 | **take** | One try. You make a few takes, listen or look, and keep the best. Takes are scratch files: only the one you **use** becomes part of the game. |
 | **seed** | The number that picks one particular take. The same settings and seed make the same take again. |
 | **engine** | One AI model set up on your PC (pictures, music, sounds, voices). |
 
-The **todo / draft / done** buttons under every asset change its status straight away.
+The **todo / draft / done / keep** buttons under every asset change its status straight away. Click several quickly
+if you like: each one waits for the one before it.
 
 ## AI engines: how they work
 
@@ -90,8 +92,8 @@ the processor, so it doesn't unload the picture model.
 | **Keep** (a star on pictures) | Stars it, so you can find your favourites (Pictures: **Show: ★ Starred**) |
 | **Another take** | Same settings, new seed: one more version, right away |
 | **Adjust** (pictures: **edit and make again**, a pencil) | Puts its settings, seed included, back in the form, to change something first and make it again |
-| **Use as asset… / Use for a track…** | Makes it the game's file for an asset you pick, and marks that asset `source: ai` and draft |
-| **Remove** (red) | Moves it to the `_removed` folder next to it (not deleted) |
+| **Use as asset… / Use for a track…** | Opens a box under it: pick the asset (it starts on *(pick one)*), then **Use**. Makes it the game's file for that asset, and marks it `source: ai` and draft. If the asset already has a file, you're asked first, with its name |
+| **Remove** (red) | Moves it to the `_removed` folder next to it (not deleted). Starred or kept ones ask first |
 
 On the Pictures tab most of these are small icon buttons: hover over one to see its name.
 
@@ -121,11 +123,14 @@ pictures, but whether a sound or tune is right is your call. Listen before you u
 
 - **Progress** (left): how much is done, and a table per kind (sprites, icons, sounds, voices, music...).
 - **Show**: filter by kind or status, or search. "Not done" hides finished things: a handy to-do list.
-- The list (right): every asset with a small preview or a player, its size and animation frames, and notes.
+- The list (right): every asset with a small preview or a player, its size and animation frames, and notes (click
+  them to read all of it). **Work on this →** opens the tab where it's made, with it picked: Sounds or Music with that
+  sound or track chosen, Voices, Pictures with **For asset** set (for `ai` sprites), or Art showing just that image.
 - **Checks**:
   - **Check the manifest**: finds mistakes in `assets.yaml` (typos, missing sizes, missing licenses).
   - **Check the files**: checks made files are the right size, use the palette's colors, and that sounds aren't silent or distorted.
   - **Write CREDITS.md**: lists who made the downloaded assets, and what was made in-house or with AI. Ship it with the game.
+  - In the results, an asset's name is a link: click it to show just that asset in the list.
 
 ## Sounds tab: make and pick sound effects
 
@@ -216,16 +221,20 @@ first for better structure, but takes about 7 minutes a take on your AMD card an
 
 ## Art tab: look at your sprites
 
-- A gallery of every image, enlarged with crisp pixels. Use **Zoom** to change the size.
+- A gallery of every image, enlarged with crisp pixels. Use **Zoom** to change the size, **Search** to find one by name.
 - Empty dashed boxes are images not made yet; the box shows the size the game expects.
 - **from code**: images with no art file yet that the game draws itself from text in its code
   (GameTest: `src/art/pixel_art.gd`, set as `code_art` in `assets.yaml`). That's what the player sees
   today. Magenta parts are the player color. Once an art file exists, the page shows the file instead,
   just like the game. **Only finished art files** hides the code art.
 - Animated sprites show all their frames together.
-- **Draw** (for `claude` assets): Claude writes each sprite as text in `art/<id>.yaml`. To get a new or
-  changed sprite, ask Claude (e.g. "draw the bat"). If you edit the text file yourself, press
-  **Draw** to turn it into the PNG.
+- **Claude's drafts** (for `claude` assets): Claude writes each sprite as text in `art/<id>.yaml`, which the
+  game doesn't read. Ask for a batch, e.g. "redraw the relic icons": Claude starts each draft from the game's
+  own drawing (`gamekit seed`) and improves it. A tile with a draft waiting has a yellow border and shows
+  **now** next to **Claude's draft**. **Only Claude's drafts waiting for you** shows just those.
+  - **Use draft** puts that draft into the game (todo becomes draft). **Use all drafts shown** does every
+    waiting tile on screen, after asking once. Don't like one? Tell Claude what to change, or leave it.
+  - **Draw** (no draft waiting): draws the text file into the game again, e.g. after you edited it yourself.
 - **Export** (for `self` assets): turns your Aseprite file into the PNG. Needs Aseprite.
 - **Check** / **Check the images**: size and palette problems, listed at the top.
 
@@ -242,7 +251,7 @@ Pictures from a description (FLUX.2 klein), on your graphics card.
    (pixel art sprite, item icon, seamless texture, character sheet, concept art, dark fantasy).
 3. **Size**: square, wide and tall shapes; smaller is faster (512 the fastest). **Takes**: how many versions. **Repeats without a seam** for floor and wall textures.
    **Seed**: leave empty for new versions.
-4. **Make it**. Click any picture to see it full size.
+4. **Make it**. Click any picture (or press Enter on it) to see it full size; click again or press Escape to close.
 
 **Each picture tile** shows the asset it's for and the words that matter, with tags under them (sprite and its
 size, cut-out, touch-up draft, worked from a picture). **Details** shows the whole description, size, seed, date
@@ -251,7 +260,7 @@ and file name. On the picture: a **star** for your favourites and a **Picture / 
 more right away: same words and size, new seed), **edit and make again** (pencil: puts its words, size and seed in
 the form so you can change something first; with the same seed, a small change in the words gives a close
 variation), work from this, animate (a walking person), and **remove** (red, on the right; it moves the picture to
-`pictures/_removed`). Sprite tiles have **Use in game…**, **Touch up with Claude** and animate. Above the tiles, **Show** picks All, **★ Starred** or
+`pictures/_removed`, and asks first if it's starred). Sprite tiles have **Use in game…**, **Touch up with Claude** and animate. Above the tiles, **Show** picks All, **★ Starred** or
 **Sprites** (sprite tiles and touch-up drafts), and **View** shows every tile as a picture or in game.
 
 **Work from this** starts the next pictures from that one: the new pictures keep the creature's look, colors and
@@ -263,6 +272,7 @@ it again, or × under Working from, to stop.
 **Animate…** turns a picture into a whole animation for an animated sprite:
 1. Press **Animate…** under the picture. A panel opens at the top with one box per frame of the asset (e.g.
    `shambler`, `shambler_walk_1`, `shambler_walk_2`). The first frame uses your picture (its cut-out if it has one).
+   A picture that wasn't made for an animated sprite asks which one first.
 2. Empty frames show the words they'll be made from ("...walking, left foot forward"). Change them if you like,
    then press **Make the missing frames**. Each one is made from your picture, then cut out (about 30 s each,
    plus loading the model the first time).
@@ -300,10 +310,12 @@ simple background removal can miss. Cut out before you use a picture as a sprite
 
 **Use as asset…** opens the tile across the whole row, with the picture on the left and three steps on the right:
 - Pick **which sprite** and, for animated sprites, **which frame** (`shambler`, `shambler_walk_1`, `shambler_walk_2`).
-  Each frame is its own file, so use one picture per frame.
+  Each frame is its own file, so use one picture per frame. A picture made for a sprite starts on it; any other starts
+  on *(pick one)*, and nothing can be used until you pick.
 - **Shrinking**: **Remove background**, **Snap to palette** (never to the reserved player colors) and
   **Outline** follow the game's sprite rules; switch any of them off.
-- **What it makes** shows exactly what will be saved, zoomed in and in game. Change the options and it updates.
+- **What it makes** shows exactly what will be saved, zoomed in and in game. Change the options and it updates
+  ("Making the preview…" while it works: a few seconds for a big picture).
 - Then **Use in game** (replaces the sprite in your game), **Keep as a sprite tile**, or **Touch up with Claude**.
   Only **Use in game** changes the game.
 
@@ -394,9 +406,14 @@ entries in `assets.yaml` with `kind: voice`: ask Claude to add the ones your gam
 2. **Sounds**: pick a sound, make AI or retro takes, listen, and use or keep the best.
 3. **Music**: describe a track, make two or three takes, use the best for its track and fix the loop end.
 4. **Voices**: write the lines, pick a voice, keep the best readings and use them.
-5. **Pictures**: make references or textures; for small sprites, ask Claude to draw them from your favourite picture.
-6. Play the game. Happy with something? Mark the asset **done**.
+5. **Art**: ask Claude to redraw a family of icons or sprites; look at its drafts next to what the game has now and
+   **Use** the ones you like. **Pictures**: make references or textures; for small sprites, ask Claude to draw them
+   from your favourite picture.
+6. Play the game. Happy with something? Mark the asset **done**. Decided the game's own version stays? Mark it **keep**.
 7. Before a release: **Check the manifest**, **Check the files**, and **Write CREDITS.md**.
+
+**Keyboard:** Tab moves between everything you can press (a green ring shows where you are); Enter or Space presses
+it, including pictures, pack images and pack names; Escape closes a picture shown full size.
 
 ## When something goes wrong
 
@@ -406,7 +423,7 @@ entries in `assets.yaml` with `kind: voice`: ask Claude to add the ones your gam
 | "not found. Run `gamekit init` first" | Run it from the game folder (the one with `assets.yaml`). |
 | The window doesn't open | Open the address printed in the black window (`http://127.0.0.1:7862`) in any browser. |
 | "no answer from gamekit" | The black window was closed. Start it again. |
-| "still busy" | Another job (an AI take, music rendering) is running. Wait, or press **Stop** in the bar. |
+| "still busy" | Another job (an AI take, music rendering) is running. Wait, or press **Stop** in the bar. (Quick clicks, like several status buttons, just wait their turn.) |
 | Changes made by Claude don't show | Press **Refresh**. |
 | A new tab or button is missing after an update | Close the black window and start the page again. |
 | "the … engine isn't set up yet" | Press **Set up** on that tab (once per PC). |

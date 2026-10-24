@@ -69,7 +69,7 @@ def render_wavs(godot: str, project: Path, script: str, tracks: list[str], out_d
     if not (project / script).exists():
         raise MusicError(f"render script {project / script} not found (set music.render_script in assets.yaml)")
     result = subprocess.run(render_command(godot, project, script, out_dir, tracks),
-                            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=1800)
+                            stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
     wavs = {t: out_dir / f"{t}.wav" for t in tracks}
     missing = [t for t, p in wavs.items() if not p.exists()]
     if result.returncode != 0 or missing:
@@ -97,7 +97,7 @@ def measure_loudness(source: Path, ffmpeg: str | None = None, start: float | Non
     chain = (filters + "," if filters else "") + "loudnorm=print_format=json"
     command = ([ffmpeg or audio.find_ffmpeg(), "-hide_banner", "-nostats"] + _cut_args(start, end)
                + ["-i", str(source), "-af", chain, "-f", "null", "-"])
-    result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace")
     match = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", result.stderr)
     if result.returncode != 0 or not match:
         raise MusicError(f"ffmpeg couldn't measure {source}: {result.stderr.strip()[-500:]}")
@@ -148,7 +148,7 @@ def encode_ogg(source: Path, out: Path, loudness: float | None = None, quality: 
         command += ["-af", chain]
     out.parent.mkdir(parents=True, exist_ok=True)
     command += ["-ar", "44100", "-c:a", "libvorbis", "-q:a", str(quality), str(out)]
-    result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode != 0:
         raise MusicError(f"ffmpeg couldn't encode {out.name}: {result.stderr.strip()[-500:]}")
     return note

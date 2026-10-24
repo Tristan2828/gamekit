@@ -7,8 +7,10 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import (art, aseprite, audio, credits, engines, made, manifest, music, packs, palette, pictures, pipeline,
-               sfxr, touchup, ui)
+from PIL import Image
+
+from . import (art, aseprite, audio, codeart, credits, engines, made, manifest, music, packs, palette, pictures,
+               pipeline, sfxr, touchup, ui)
 
 TEMPLATES = Path(__file__).resolve().parent.parent.parent / "templates"
 
@@ -32,7 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     write_credits.add_argument("-o", "--out", default="CREDITS.md", help="output path (default: ./CREDITS.md)")
 
     draw = commands.add_parser("draw", help="render Claude's text sprites (art/<id>.yaml) to PNG")
-    draw.add_argument("ids", nargs="*", help="asset ids (default: every source: claude asset with a source file)")
+    draw.add_argument("ids", nargs="*", help="asset ids to draw into the game")
+    draw.add_argument("--all", action="store_true", help="draw every source: claude asset that has a text sprite")
 
     export = commands.add_parser("export", help="export .aseprite files with the Aseprite CLI")
     export.add_argument("ids", nargs="*", help="asset ids (default: every source: self asset with a source file)")
@@ -40,8 +43,20 @@ def main(argv: list[str] | None = None) -> int:
     check = commands.add_parser("check", help="check finished files: image size, frames, palette; sound format")
     check.add_argument("ids", nargs="*", help="asset ids (default: every image, .wav and .ogg asset whose file exists)")
 
-    show = commands.add_parser("preview", help="write a scaled-up contact sheet of finished images")
-    show.add_argument("ids", nargs="*", help="asset ids (default: every image asset whose file exists)")
+    seed = commands.add_parser("seed", help="start Claude's text sprites (art/<id>.yaml) from the game's code art")
+    seed.add_argument("ids", nargs="*", help="asset ids (default: every source: claude image asset)")
+    _pick_args(seed)
+
+    show = commands.add_parser("preview", help="write a scaled-up contact sheet of images")
+    show.add_argument("ids", nargs="*", help="asset ids (default: every image asset with something to show)")
+    _pick_args(show)
+    show.add_argument("--draft", action="store_true",
+                      help="show the text sprites (art/<id>.yaml) as they would draw, without writing the game")
+    show.add_argument("--compare", action="store_true",
+                      help="each asset twice: what the game shows now (file or code art), then the draft")
+    show.add_argument("--bg", default="",
+                      help="background: checker, a floor name from assets.yaml `sprites.floors`, or RRGGBB "
+                           "(default: the first floor, else checker)")
     show.add_argument("-o", "--out", default="preview.png", help="output path (default: ./preview.png)")
     show.add_argument("--scale", type=int, default=4, help="pixel scale (default: 4)")
     show.add_argument("--columns", type=int, default=6, help="images per row (default: 6)")
@@ -222,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     handlers = {"init": _init, "validate": _validate, "status": _status, "credits": _credits,
-                "draw": _draw, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
+                "draw": _draw, "seed": _seed, "export": _export, "check": _check, "preview": _preview, "pack": _pack,
                 "sfx": _sfx, "music": _music, "ui": _ui, "engines": _engines, "picture": _picture,
                 "picture-cutout": _picture_cutout, "picture-use": _picture_use,
                 "picture-frames": _picture_frames, "touchup": _touchup, "touchup-render": _touchup_render,"sound": _sound, "voice": _voice,
@@ -231,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         return handlers[args.command](args)
     except (manifest.ManifestError, palette.PaletteError, art.ArtError, aseprite.AsepriteError,
             packs.PackError, audio.AudioError, music.MusicError, ui.UserError, engines.EngineError,
-            pictures.PictureError, touchup.TouchUpError) as error:
+            pictures.PictureError, touchup.TouchUpError, codeart.CodeArtError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
@@ -275,27 +290,37 @@ def _validate(args: argparse.Namespace) -> int:
 def _status(args: argparse.Namespace) -> int:
     loaded = manifest.load(args.manifest)
     table = manifest.summary(loaded)
-    header = f"{'kind':<10}{'todo':>6}{'draft':>7}{'done':>6}{'total':>7}{'images':>8}"
+    header = f"{'kind':<10}{'todo':>6}{'draft':>7}{'done':>6}{'keep':>6}{'total':>7}{'images':>8}"
     print(f"{loaded.game or args.manifest}")
     print(header)
     print("-" * len(header))
-    totals = {"todo": 0, "draft": 0, "done": 0, "frames": 0}
+    totals = {s: 0 for s in manifest.STATUSES} | {"frames": 0}
+
+    def line(name: str, row: dict[str, int]) -> str:
+        images = str(row["frames"]) if row["frames"] else "-"
+        return (f"{name:<10}{row['todo']:>6}{row['draft']:>7}{row['done']:>6}{row['keep']:>6}"
+                f"{sum(row[s] for s in manifest.STATUSES):>7}{images:>8}")
+
     for kind in manifest.KINDS:
         if kind not in table:
             continue
-        row = table[kind]
-        total = row["todo"] + row["draft"] + row["done"]
-        images = str(row["frames"]) if row["frames"] else "-"
-        print(f"{kind:<10}{row['todo']:>6}{row['draft']:>7}{row['done']:>6}{total:>7}{images:>8}")
+        print(line(kind, table[kind]))
         for key in totals:
-            totals[key] += row[key]
-    count = totals["todo"] + totals["draft"] + totals["done"]
+            totals[key] += table[kind][key]
+    count = sum(totals[s] for s in manifest.STATUSES)
     print("-" * len(header))
-    print(f"{'all':<10}{totals['todo']:>6}{totals['draft']:>7}{totals['done']:>6}{count:>7}{totals['frames']:>8}")
+    print(line("all", totals))
     if count:
-        print(f"{round(100 * totals['done'] / count)}% done")
+        finished = sum(totals[s] for s in manifest.FINISHED)
+        kept = f" ({totals['keep']} kept as the game makes them)" if totals["keep"] else ""
+        print(f"{round(100 * finished / count)}% done{kept}")
+    has_file = [a.id for a in loaded.assets if a.status == "todo" and a.file and loaded.asset_path(a).exists()]
+    if has_file:  # a file is in the game already: usually draft (not final yet)
+        shown = ", ".join(has_file[:5]) + (f" and {len(has_file) - 5} more" if len(has_file) > 5 else "")
+        print(f"note: {len(has_file)} todo asset{'s have' if len(has_file) != 1 else ' has'} a file in the game "
+              f"already ({shown}): draft?")
     if args.todo:
-        unfinished = [a for a in loaded.assets if a.status != "done"]
+        unfinished = [a for a in loaded.assets if a.status not in manifest.FINISHED]
         if unfinished:
             print("\nunfinished:")
             for a in unfinished:
@@ -341,8 +366,14 @@ def _report(results: list[tuple[manifest.Asset, list[str]]], verb: str) -> int:
 
 
 def _draw(args: argparse.Namespace) -> int:
+    if not args.ids and not args.all:
+        raise art.ArtError("name the assets to draw into the game (or --all for every text sprite); "
+                           "`preview --draft` shows drafts without drawing them")
     loaded = manifest.load(args.manifest)
     results = [(a, pipeline.draw(loaded, a)) for a in _sources(loaded, args.ids, "claude")]
+    for a, _ in results:
+        if a.status == "todo":  # it has a file in the game now, like the page's Draw button
+            manifest.set_status(loaded.path, a.id, "draft")
     return _report(results, "drawn")
 
 
@@ -370,10 +401,86 @@ def _check(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _pick_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--kind", choices=sorted(manifest.KINDS), help="only assets of this kind")
+    parser.add_argument("--status", choices=manifest.STATUSES, help="only assets with this status")
+
+
+def _picked(loaded: manifest.Manifest, args: argparse.Namespace) -> list[manifest.Asset]:
+    """The named image assets (all when none are named), narrowed by --kind and --status."""
+    return [a for a in pipeline.image_assets(loaded, args.ids)
+            if (not args.kind or a.kind == args.kind) and (not args.status or a.status == args.status)]
+
+
+def _seed(args: argparse.Namespace) -> int:
+    loaded = manifest.load(args.manifest)
+    if not loaded.code_art:
+        raise codeart.CodeArtError("assets.yaml has no `code_art` set, so there is nothing to start from")
+    entries = pipeline.palette_entries(loaded)
+    wrote = 0
+    for a in _picked(loaded, args):
+        src = loaded.source_path(a)
+        if a.source != "claude" or src is None or src.suffix.lower() not in (".yaml", ".yml"):
+            if args.ids:
+                print(f"{a.id}: skipped (source {a.source}, not a Claude text sprite)")
+            continue
+        if src.exists():
+            if args.ids:
+                print(f"{a.id}: skipped ({src.relative_to(loaded.root).as_posix()} already exists)")
+            continue
+        if not codeart.has_art(loaded, a):
+            if args.ids:
+                print(f"{a.id}: skipped (no {codeart.sprite_name(a)!r} in {loaded.code_art})")
+            continue
+        text, warnings = codeart.seed_text(loaded, a, entries)
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text(text, encoding="utf-8")
+        wrote += 1
+        print(f"{a.id}: seeded {src.relative_to(loaded.root).as_posix()}")
+        for warning in warnings:
+            print(f"  - {warning}")
+    print(f"seeded {wrote} text sprite{'s' if wrote != 1 else ''} (the game's files are unchanged)")
+    return 0
+
+
+def _background(loaded: manifest.Manifest, choice: str) -> palette.Color | None:
+    floors = loaded.sprites.get("floors") if isinstance(loaded.sprites.get("floors"), dict) else {}
+    if choice == "checker" or not choice and not floors:
+        return None
+    value = str(floors.get(choice, choice) if choice else next(iter(floors.values())))
+    try:
+        if len(value.lstrip("#")) != 6:
+            raise ValueError(value)
+        return palette.parse_hex(value)
+    except ValueError:
+        names = ", ".join(floors) or "none in assets.yaml"
+        raise art.ArtError(f"--bg {choice!r}: not checker, a floor ({names}) or RRGGBB") from None
+
+
 def _preview(args: argparse.Namespace) -> int:
     loaded = manifest.load(args.manifest)
-    items = pipeline.preview_items(loaded, pipeline.image_assets(loaded, args.ids))
-    art.preview(items, scale=max(1, args.scale), columns=max(1, args.columns)).save(args.out)
+    items: list[tuple[str, Image.Image | None]] = []
+    for a in _picked(loaded, args):
+        if args.draft or args.compare:
+            draft = pipeline.draft_image(loaded, a)
+            if draft is None and not (args.compare and args.ids):
+                continue
+            if args.compare:
+                now, where = pipeline.current_image(loaded, a)
+                items.append((f"{a.id} ({where or 'nothing'})", now))
+                items.append((f"{a.id} draft" if draft else f"{a.id}: no draft", draft))
+            else:
+                items.append((a.id, draft))
+        else:
+            now, where = pipeline.current_image(loaded, a)
+            if now is not None:
+                items.append((a.id if where == "file" else f"{a.id} (code)", now))
+    columns = max(1, args.columns)
+    if args.compare and columns % 2:
+        columns += 1  # keep each now / draft pair on one row
+    sheet = art.preview(items, scale=max(1, args.scale), columns=columns,
+                        background=_background(loaded, args.bg))
+    sheet.save(args.out)
     print(f"wrote {args.out} ({len(items)} images)")
     return 0
 
@@ -601,7 +708,10 @@ def _sfx_variants(args: argparse.Namespace, loaded: manifest.Manifest) -> int:
         raise audio.AudioError(f"{src} not found: give --preset, or start one with `sfx new`")
     base = sfxr.load(src) if not args.preset else None
     folder = src.parent / "variants"
-    for n in range(1, max(1, args.count) + 1):
+    # numbered after the takes already there (the page's too), so none is overwritten
+    first = max((ui.take_number(p, asset.id) for p in folder.glob(f"{asset.id}_*.yaml")), default=0) + 1 \
+        if folder.exists() else 1
+    for n in range(first, first + max(1, args.count)):
         if args.preset:
             params = sfxr.preset(args.preset, n)
         else:
@@ -819,10 +929,11 @@ def _picture_frames(args: argparse.Namespace) -> int:
         if not name:
             raise pictures.PictureError(f"{item!r}: write <frame>=<picture>, e.g. {asset.id}_walk_1=walk.png")
         chosen[frame] = name
+    changes, note = packs.picture_source(loaded, list(chosen.values()))
     problems = pictures.use_frames(loaded, asset, chosen, background=not args.keep_background,
                                    snap=not args.no_palette, outline=not args.no_outline)
-    manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
-    print(f"{asset.id}: wrote {', '.join(chosen)} (one shared crop; source: ai)")
+    manifest.set_fields(loaded.path, asset.id, changes | ({"status": "draft"} if asset.status == "todo" else {}))
+    print(f"{asset.id}: wrote {', '.join(chosen)} (one shared crop; source: {changes['source']}){note}")
     for problem in problems:
         print(f"  - {problem}")
     return 0
@@ -834,7 +945,7 @@ def _touchup(args: argparse.Namespace) -> int:
     chosen = {}
     for item in args.pictures:
         frame, _, name = item.partition("=")
-        chosen[frame if name else asset.id] = name or frame
+        chosen[frame if name else pictures.frame_targets(loaded, asset)[0]] = name or frame
     if not loaded.frame_paths(asset):
         chosen = {asset.id: next(iter(chosen.values()))}
     saved = touchup.drafts(loaded, asset, chosen, not args.keep_background, not args.no_palette,
@@ -859,10 +970,12 @@ def _picture_use(args: argparse.Namespace) -> int:
     target = {path.stem: path for _, _, path in loaded.frame_paths(asset)}.get(args.frame, loaded.asset_path(asset))
     if target.exists() and not args.force:
         raise pictures.PictureError(f"{target} already exists; add --force to replace it")
+    changes, note = packs.picture_source(loaded, [args.picture])
     problems = pictures.use_as_asset(loaded, asset, args.picture, background=not args.keep_background,
                                      snap=not args.no_palette, outline=not args.no_outline, frame=args.frame)
-    manifest.set_fields(loaded.path, asset.id, {"source": "ai"} | ({"status": "draft"} if asset.status == "todo" else {}))
-    print(f"{args.frame or asset.id}: {args.picture} -> {target.relative_to(loaded.root).as_posix()} (source: ai)")
+    manifest.set_fields(loaded.path, asset.id, changes | ({"status": "draft"} if asset.status == "todo" else {}))
+    print(f"{args.frame or asset.id}: {args.picture} -> {target.relative_to(loaded.root).as_posix()} "
+          f"(source: {changes['source']}){note}")
     for problem in problems:
         print(f"  - {problem}")
     return 0

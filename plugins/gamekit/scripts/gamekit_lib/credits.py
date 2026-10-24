@@ -15,7 +15,7 @@ def render(manifest: Manifest) -> str:
     by_author: dict[tuple[str, str, str], list[str]] = {}
     own: dict[str, int] = {}
     for a in manifest.assets:
-        if a.status == "todo":
+        if a.status in ("todo", "keep"):  # keep: the game's own code still makes it, no file from anyone
             continue
         if a.source in LICENSED_SOURCES or a.license:
             try:
