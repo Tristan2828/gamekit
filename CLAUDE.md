@@ -66,7 +66,7 @@ User guide: `docs/asset-page.md`. Logic: `pictures.py` (library, shrinking), `to
   Claude Code itself must be restarted to load new skills.
 - Visual checks of the page: Playwright MCP works (Chrome MCP screenshots time out on a throttled window). Delete the
   `.playwright-mcp/` folder it leaves in the repo before committing. Try destructive CLI commands on a scratch copy
-  of GameTest, not the real game.
+  of Medieval Survival (`C:\Repos\medieval-survival`), not the real game.
 - On Windows, write multi-line edit scripts to a scratch `.py` file rather than a shell heredoc with backslashes.
 
 ## Verify

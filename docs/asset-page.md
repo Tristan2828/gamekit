@@ -47,7 +47,7 @@ Either way a black window appears and the page opens in its own window (Brave, C
 After gamekit is updated, close the black window and start the page again to get the new version (the
 version is shown next to the gamekit name at the top).
 
-The `.bat` is just a shortcut: commit it with the game, or add it to `.gitignore` (GameTest does).
+The `.bat` is just a shortcut: commit it with the game, or add it to `.gitignore` (Medieval Survival does).
 If gamekit's folder ever moves, run step 3 again.
 
 If Claude or you edit `assets.yaml` while the page is open, press **Refresh** (top right).
@@ -98,7 +98,7 @@ the processor, so it doesn't unload the picture model.
 On the Pictures tab most of these are small icon buttons: hover over one to see its name.
 
 **Where things go:** takes are saved in the game folder, each with a `.json` beside it holding the settings
-that made it: `pictures/`, `music-takes/`, `sound-takes/`, `voice-takes/`. GameTest's `.gitignore` keeps them out
+that made it: `pictures/`, `music-takes/`, `sound-takes/`, `voice-takes/`. Medieval Survival's `.gitignore` keeps them out
 of git. The engines and models themselves live in `%LOCALAPPDATA%\gamekit\engines` (about 50 GB in all), not in
 the game or in gamekit.
 
@@ -224,7 +224,7 @@ first for better structure, but takes about 7 minutes a take on your AMD card an
 - A gallery of every image, enlarged with crisp pixels. Use **Zoom** to change the size, **Search** to find one by name.
 - Empty dashed boxes are images not made yet; the box shows the size the game expects.
 - **from code**: images with no art file yet that the game draws itself from text in its code
-  (GameTest: `src/art/pixel_art.gd`, set as `code_art` in `assets.yaml`). That's what the player sees
+  (Medieval Survival: `src/art/pixel_art.gd`, set as `code_art` in `assets.yaml`). That's what the player sees
   today. Magenta parts are the player color. Once an art file exists, the page shows the file instead,
   just like the game. **Only finished art files** hides the code art.
 - Animated sprites show all their frames together.
@@ -322,7 +322,7 @@ simple background removal can miss. Cut out before you use a picture as a sprite
 How shrinking works: each sprite pixel takes the most common palette color in its patch of the picture, matched
 by hue. So small details such as red eyes keep their color instead of turning into a brown-grey average.
 
-**What to expect at each size** (tried on GameTest's enemies):
+**What to expect at each size** (tried on Medieval Survival's enemies):
 - **18×18 and bigger** (bosses, ghoul, paladin): good starting points, often usable after a quick touch-up.
 - **10 to 14 px** (shambler, cultist, imp): readable blobs with the right colors and eyes. Fine as drafts.
 - **Smaller or very wide** (bat 14×8, mire crawler 10×8): the face mostly disappears.
