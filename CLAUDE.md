@@ -3,7 +3,7 @@
 Gamekit is a Claude Code plugin (plus plain Python CLI) for a game's art and audio pipeline. The
 owner is new to game dev and has Claude write most of the code: explain new concepts briefly and
 prefer simple, readable solutions. Users (Godot games, Windows): Medieval Survival
-(`Tristan2828/medieval-survival`, formerly GameTest; local folder still `C:\Repos\GameTest`) and
+(`Tristan2828/medieval-survival`, formerly GameTest; local folder `C:\Repos\medieval-survival`) and
 `C:\Repos\vertical-scroller` (the Packs tab was built for its downloads).
 
 ## Layout
@@ -58,7 +58,7 @@ User guide: `docs/asset-page.md`. Logic: `pictures.py` (library, shrinking), `to
 - They test on the page and give UI feedback in batches; explain choices briefly (e.g. why two similar buttons exist).
 - Release flow when they say so: run tests, bump `plugin.json` version, commit, **ask before `git push`**, then
   `claude plugin marketplace update gamekit` + `claude plugin update gamekit@gamekit`, and restart the page from
-  `C:\Repos\GameTest` (`python C:\Repos\gamekit\plugins\gamekit\scripts\gamekit.py -m assets.yaml ui`, port 7862).
+  `C:\Repos\medieval-survival` (`python C:\Repos\gamekit\plugins\gamekit\scripts\gamekit.py -m assets.yaml ui`, port 7862).
   Claude Code itself must be restarted to load new skills.
 - Visual checks of the page: Playwright MCP works (Chrome MCP screenshots time out on a throttled window). Delete the
   `.playwright-mcp/` folder it leaves in the repo before committing. Try destructive CLI commands on a scratch copy

@@ -25,9 +25,9 @@ The page always works on one game: the one whose folder you start it from. That 
 **First time: make a double-click launcher (once per game)**
 
 1. Open PowerShell.
-2. Go to the game's folder, for example GameTest:
+2. Go to the game's folder, for example medieval-survival:
    ```
-   cd C:\Repos\GameTest
+   cd C:\Repos\medieval-survival
    ```
 3. Make the launcher:
    ```
