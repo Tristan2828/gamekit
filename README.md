@@ -1,5 +1,10 @@
 # Gamekit
 
+> **No longer developed.** Gamekit is archived. Its pack browsing and AI picture, music, voice and sound
+> tools now live in [Hearthtone](https://github.com/socr4tesjohnson/hearthtone) (the Packs tab and the model
+> workers), and new work goes there. The plugin still works as it is for the games that already use it
+> (Medieval Survival and vertical-scroller), but nothing new will be added.
+
 A Claude Code plugin for making a game's art and audio: plan every asset in one manifest, then make
 or find each one (Claude-drawn pixel art, your own Aseprite files, ready-made packs, procedural
 sound effects, rendered music), with licenses and credits tracked along the way.
